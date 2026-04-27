@@ -1,0 +1,48 @@
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Next.js
+machina/.next/
+machina/out/
+machina/build/
+machina/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing / coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Vercel
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Local Supabase CLI
+supabase/.branches/
+supabase/.temp/
