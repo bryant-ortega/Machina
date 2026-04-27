@@ -147,7 +147,7 @@ LosGothsCo currently operates across three Google Sheets:
 
 | Layer | Technology | Reason | Cost |
 |---|---|---|---|
-| **Frontend & Routing** | Next.js 14 (App Router) | Full-stack React, API routes built in, Vercel-native | Free |
+| **Frontend & Routing** | Next.js 16 (App Router) | Full-stack React, API routes built in, Vercel-native | Free |
 | **Hosting** | Vercel | Zero-config deploys, free tier covers all internal traffic | Free |
 | **Database** | Supabase (PostgreSQL) | Relational DB, real-time, built-in auth, file storage | Free → $25/mo |
 | **Authentication** | Supabase Auth | Magic link flow, role-based access | Included |

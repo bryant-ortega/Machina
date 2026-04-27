@@ -131,20 +131,38 @@ npx create-next-app@latest . \
   --import-alias "@/*"
 ```
 
+> Note: This plan was originally written against Next.js 14, but `@latest` will
+> install the current major (16.x at time of build). The Phase 0.7 client/server
+> code uses the modern `await cookies()` pattern that requires Next.js 15+ —
+> stay on the latest major rather than pinning back to 14.
+
 #### 0.3 — Dependencies
 ```bash
 npm install @supabase/supabase-js @supabase/ssr
-npm install @supabase/auth-helpers-nextjs
 npm install lucide-react
 npm install clsx tailwind-merge
 npm install zod
 npm install @hookform/resolvers react-hook-form
 ```
 
+> Note: `@supabase/auth-helpers-nextjs` is deprecated and intentionally NOT installed.
+> All auth flows use `@supabase/ssr`, which is the supported successor and provides
+> the same functionality with the modern App Router API.
+
 #### 0.4 — Supabase Project
 - Create a new Supabase project at https://supabase.com
 - Project name: `machina` (or your preferred name)
-- Save the project URL and anon key
+- Enable RLS by default on new tables
+- Save the project URL, publishable key, and secret key
+
+> Note on key naming: Supabase has migrated from the legacy `anon` / `service_role`
+> JWT keys to a new format with a clearer naming convention:
+> - **Publishable key** (`sb_publishable_…`) — replaces `anon`. Browser-safe; gated by RLS.
+> - **Secret key** (`sb_secret_…`) — replaces `service_role`. Server-only; bypasses RLS.
+>
+> Both work transparently with `@supabase/ssr`. The env var names below
+> (`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) keep their
+> legacy names for code-stability — only the key *values* change format.
 
 #### 0.5 — Environment Variables
 Create `.env.local` in the project root:
@@ -187,11 +205,11 @@ src/
 ├── lib/
 │   ├── supabase/
 │   │   ├── client.ts
-│   │   ├── server.ts
-│   │   └── middleware.ts
+│   │   └── server.ts
 │   └── utils.ts
-└── types/
-    └── database.ts
+├── types/
+│   └── database.ts
+└── middleware.ts            # Next.js requires middleware.ts at src/ root, not inside lib/
 ```
 
 #### 0.7 — Supabase Client Files
@@ -259,13 +277,21 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Protect admin routes — return 404 (not 401) to unauthenticated users
-  if (request.nextUrl.pathname.startsWith('/(admin)') && !user) {
+  // Protect admin routes — return 404 (not 401) to unauthenticated users.
+  // Note: `(admin)` is a Next.js route group, which means it does NOT appear
+  // in the URL. Match by the actual top-level admin paths instead.
+  const path = request.nextUrl.pathname
+  const isAdminRoute =
+    path.startsWith('/events') ||
+    path.startsWith('/djs') ||
+    path.startsWith('/settings')
+
+  if (isAdminRoute && !user) {
     return NextResponse.rewrite(new URL('/not-found', request.url))
   }
 
   // Protect DJ routes
-  if (request.nextUrl.pathname.startsWith('/dj') && !user) {
+  if (path.startsWith('/dj') && !user) {
     return NextResponse.rewrite(new URL('/not-found', request.url))
   }
 
