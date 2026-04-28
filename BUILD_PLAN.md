@@ -322,7 +322,7 @@ git push origin main
 ## Phase 1 — Core Database Schema
 
 ### Goal
-Create the 8 core tables needed for MVP. Do not create all tables at once — only these 8.
+Create the 10 core tables needed for MVP. Do not create all tables at once — only these 10.
 
 ### Tables to Create (in this order)
 1. `profiles`
