@@ -6,9 +6,14 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
  * Admin shell. Wraps every (admin) route with a sidebar nav and the
  * signed-in user's display info plus a sign-out button.
  *
- * Auth gate: middleware already 404s unauthenticated visits, but we
- * redundantly verify here so a misconfigured matcher can't expose
- * the shell. Profile + role are loaded for display + future role checks.
+ * Auth gates (defense in depth):
+ *   1. middleware already 404s unauthenticated visits to (admin)/*
+ *   2. this layout re-checks the session, in case middleware is misconfigured
+ *   3. this layout enforces role === 'admin' — without this check, a logged-in
+ *      DJ who typed /events directly would see the admin shell. The data
+ *      itself is safe (RLS), but the UX would be confusing.
+ *
+ * DJs get bounced to /dj/profile; signed-out users to /login.
  */
 export default async function AdminLayout({
   children,
@@ -29,6 +34,10 @@ export default async function AdminLayout({
     .select('display_name, role')
     .eq('user_id', user.id)
     .maybeSingle()
+
+  if (profile?.role !== 'admin') {
+    redirect('/dj/profile')
+  }
 
   const displayName = profile?.display_name ?? user.email ?? 'Admin'
   const role = profile?.role ?? 'unknown'
