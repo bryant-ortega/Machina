@@ -33,6 +33,7 @@ import {
  *   6. INSERT event_budget_expenses
  *        - one row per DEFAULT_EVENT_EXPENSES line (qty=1, price=0)
  *        - one row per DJ slot, category='djs', price=SLOT_DEFAULT_RATES
+ *   7. INSERT event_tix_tiers (3 default tiers: $10 / $15 / $20, sold=0)
  *
  * Auth: re-checks admin role server-side (defence in depth on top of the
  * (admin) layout gate). DB writes go through a service-role client because
@@ -417,6 +418,17 @@ export async function createEvent(
     if (exErr) {
       return { ok: false, reason: 'db_failed', message: exErr.message }
     }
+  }
+
+  // 3h. INSERT default tix tiers (3 tiers: $10 / $15 / $20, sold=0).
+  // Admins edit prices, sold counts, and add up to 8 tiers in the budget UI.
+  const { error: tierErr } = await admin.from('event_tix_tiers').insert([
+    { budget_id: budgetId, tier_number: 1, price: 10, sold: 0 },
+    { budget_id: budgetId, tier_number: 2, price: 15, sold: 0 },
+    { budget_id: budgetId, tier_number: 3, price: 20, sold: 0 },
+  ])
+  if (tierErr) {
+    return { ok: false, reason: 'db_failed', message: tierErr.message }
   }
 
   // 4. Cache invalidation.

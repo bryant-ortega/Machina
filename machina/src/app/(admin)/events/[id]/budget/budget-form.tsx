@@ -1,0 +1,1006 @@
+'use client'
+
+import { useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  computeBudget,
+  formatUSD,
+  formatUSDCents,
+  EXPENSE_CATEGORY_ORDER,
+  EXPENSE_CATEGORY_LABELS,
+  type ExpenseCategory,
+  BAR_PER_HEAD,
+  LOSGOTHSCO_BAR_PCT,
+  MERCH_GROSS_DEFAULT,
+  MERCH_PCT_AFTER_FEES,
+  MERCH_COGS_PCT,
+  MERCH_SELLER_FEE,
+} from '@/lib/budget'
+import { updateBudget, type UpdateBudgetResult } from './actions'
+
+/**
+ * Editable estimated-budget UI for an event.
+ *
+ * Shape:
+ *   - Expenses, grouped by category. Each row has qty, unit price, computed
+ *     line total, plus a per-category subtotal and an "Add line" button.
+ *     Items can be deleted (the row turns into a pending-delete that the
+ *     server action removes on save).
+ *   - Ticket tiers, 1..8 rows, each with price + sold.
+ *   - Income parameter inputs (drop_off, guests, deductions, sponsor_income,
+ *     vendor_income) — the only per-event scalars not derived from
+ *     expenses/tiers.
+ *   - A live income summary computed via /lib/budget. Recomputes on every
+ *     keystroke; nothing in this panel is persisted directly — the next
+ *     render computes it again from the inputs.
+ *
+ * Save flow:
+ *   - Build a JSON payload that mirrors the server action's Zod schema.
+ *   - Hand it off to updateBudget. Surface field-level errors next to the
+ *     offending row by id, plus a top-level error banner for anything
+ *     non-row-shaped (e.g., db_failed).
+ *
+ * Why we keep numeric fields as strings:
+ *   - <input type="number"> + a numeric React state silently coerces "" to
+ *     NaN, which then renders as the string "NaN". Storing as string and
+ *     converting at compute/save time avoids that whole class of bug and
+ *     matches every other form in this codebase.
+ */
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type ExpenseRow = {
+  /** Stable React key. NOT the DB id. */
+  uid: string
+  /** Empty if this row was added in the form and hasn't been saved yet. */
+  id: string
+  category: ExpenseCategory
+  item: string
+  qty: string
+  price: string
+}
+
+type TierRow = {
+  uid: string
+  id: string
+  tier_number: number
+  price: string
+  sold: string
+}
+
+export type BudgetFormProps = {
+  event: {
+    id: string
+    split_pct: number
+    bar_included: boolean
+  }
+  budget: {
+    id: string
+    drop_off: number
+    guests: number
+    deductions: number
+    sponsor_income: number
+    vendor_income: number
+    merch_gross: number
+    merch_pct_after_fees: number
+    merch_cogs_pct: number
+    merch_seller_fee: number
+  }
+  initialExpenses: Array<{
+    id: string
+    category: string
+    item: string
+    qty: string
+    price: string
+  }>
+  initialTiers: Array<{
+    id: string
+    tier_number: number
+    price: string
+    sold: string
+  }>
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function BudgetForm({
+  event,
+  budget,
+  initialExpenses,
+  initialTiers,
+}: BudgetFormProps) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [topError, setTopError] = useState<string | null>(null)
+  const [topSuccess, setTopSuccess] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const [expenses, setExpenses] = useState<ExpenseRow[]>(() =>
+    initialExpenses.map((e) => ({
+      uid: crypto.randomUUID(),
+      id: e.id,
+      category: normalizeCategory(e.category),
+      item: e.item,
+      qty: e.qty,
+      price: e.price,
+    }))
+  )
+
+  const [tiers, setTiers] = useState<TierRow[]>(() =>
+    initialTiers.map((t) => ({
+      uid: crypto.randomUUID(),
+      id: t.id,
+      tier_number: t.tier_number,
+      price: t.price,
+      sold: t.sold,
+    }))
+  )
+
+  const [dropOff, setDropOff] = useState<string>(String(budget.drop_off))
+  const [guests, setGuests] = useState<string>(String(budget.guests))
+  const [deductions, setDeductions] = useState<string>(
+    String(budget.deductions)
+  )
+  const [sponsorIncome, setSponsorIncome] = useState<string>(
+    String(budget.sponsor_income)
+  )
+  const [vendorIncome, setVendorIncome] = useState<string>(
+    String(budget.vendor_income)
+  )
+  const [merchGross, setMerchGross] = useState<string>(
+    String(budget.merch_gross)
+  )
+  const [merchPctAfterFees, setMerchPctAfterFees] = useState<string>(
+    // Stored as 0..1 in the DB; surfaced as 0..100 in the UI for clarity.
+    String(budget.merch_pct_after_fees * 100)
+  )
+  const [merchCogsPct, setMerchCogsPct] = useState<string>(
+    String(budget.merch_cogs_pct * 100)
+  )
+  const [merchSellerFee, setMerchSellerFee] = useState<string>(
+    String(budget.merch_seller_fee)
+  )
+
+  // ---------------------------------------------------------------- Derived
+
+  const summary = useMemo(
+    () =>
+      computeBudget({
+        tiers: tiers.map((t) => ({
+          price: Number(t.price),
+          sold: Number(t.sold),
+        })),
+        drop_off: Number(dropOff),
+        guests: Number(guests),
+        deductions: Number(deductions),
+        sponsor_income: Number(sponsorIncome),
+        vendor_income: Number(vendorIncome),
+        split_pct: event.split_pct,
+        bar_included: event.bar_included,
+        merch_gross: Number(merchGross),
+        // UI percent (0..100) → ratio (0..1) for the formula.
+        merch_pct_after_fees: Number(merchPctAfterFees) / 100,
+        merch_cogs_pct: Number(merchCogsPct) / 100,
+        merch_seller_fee: Number(merchSellerFee),
+        expenses: expenses.map((e) => ({
+          qty: Number(e.qty),
+          price: Number(e.price),
+        })),
+      }),
+    [
+      tiers,
+      dropOff,
+      guests,
+      deductions,
+      sponsorIncome,
+      vendorIncome,
+      merchGross,
+      merchPctAfterFees,
+      merchCogsPct,
+      merchSellerFee,
+      expenses,
+      event.split_pct,
+      event.bar_included,
+    ]
+  )
+
+  /** Sum of qty × price within a single category. */
+  function categorySubtotal(cat: ExpenseCategory): number {
+    let total = 0
+    for (const e of expenses) {
+      if (e.category === cat) {
+        total += (Number(e.qty) || 0) * (Number(e.price) || 0)
+      }
+    }
+    return total
+  }
+
+  // ------------------------------------------------------------- Mutations
+
+  function updateExpense(uid: string, patch: Partial<ExpenseRow>) {
+    setExpenses((prev) =>
+      prev.map((e) => (e.uid === uid ? { ...e, ...patch } : e))
+    )
+  }
+
+  function addExpenseInCategory(cat: ExpenseCategory) {
+    setExpenses((prev) => [
+      ...prev,
+      {
+        uid: crypto.randomUUID(),
+        id: '',
+        category: cat,
+        item: '',
+        qty: '1',
+        price: '0',
+      },
+    ])
+  }
+
+  function removeExpense(uid: string) {
+    setExpenses((prev) => prev.filter((e) => e.uid !== uid))
+  }
+
+  function updateTier(uid: string, patch: Partial<TierRow>) {
+    setTiers((prev) =>
+      prev.map((t) => (t.uid === uid ? { ...t, ...patch } : t))
+    )
+  }
+
+  function addTier() {
+    if (tiers.length >= 8) return
+    // Find the smallest available tier_number 1..8.
+    const taken = new Set(tiers.map((t) => t.tier_number))
+    let next = 1
+    while (taken.has(next) && next <= 8) next++
+    if (next > 8) return
+    setTiers((prev) => [
+      ...prev,
+      {
+        uid: crypto.randomUUID(),
+        id: '',
+        tier_number: next,
+        price: '0',
+        sold: '0',
+      },
+    ])
+  }
+
+  function removeTier(uid: string) {
+    setTiers((prev) => prev.filter((t) => t.uid !== uid))
+  }
+
+  // --------------------------------------------------------------- Submit
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setTopError(null)
+    setTopSuccess(null)
+    setFieldErrors({})
+
+    // Light client-side guard: every expense needs a non-empty item.
+    for (const ex of expenses) {
+      if (!ex.item.trim()) {
+        setTopError('Every expense line needs a name.')
+        return
+      }
+    }
+
+    const payload = {
+      event_id: event.id,
+      budget_id: budget.id,
+      drop_off: Number(dropOff) || 0,
+      guests: Number(guests) || 0,
+      deductions: Number(deductions) || 0,
+      sponsor_income: Number(sponsorIncome) || 0,
+      vendor_income: Number(vendorIncome) || 0,
+      merch_gross: Number(merchGross) || 0,
+      merch_pct_after_fees: (Number(merchPctAfterFees) || 0) / 100,
+      merch_cogs_pct: (Number(merchCogsPct) || 0) / 100,
+      merch_seller_fee: Number(merchSellerFee) || 0,
+      expenses: expenses.map((ex) => ({
+        id: ex.id || '',
+        category: ex.category,
+        item: ex.item.trim(),
+        qty: Number(ex.qty) || 0,
+        price: Number(ex.price) || 0,
+      })),
+      tiers: tiers.map((t) => ({
+        id: t.id || '',
+        tier_number: t.tier_number,
+        price: Number(t.price) || 0,
+        sold: Number(t.sold) || 0,
+      })),
+    }
+
+    startTransition(async () => {
+      const result: UpdateBudgetResult = await updateBudget(payload)
+      if (result.ok) {
+        setTopSuccess('Saved')
+        router.refresh()
+        return
+      }
+      if (result.reason === 'invalid') {
+        const fErrors: Record<string, string> = {}
+        const stray: string[] = []
+        for (const issue of result.issues) {
+          if (issue.path && !issue.path.startsWith('(')) {
+            fErrors[issue.path] = issue.message
+          } else {
+            stray.push(issue.message)
+          }
+        }
+        setFieldErrors(fErrors)
+        setTopError(
+          stray.length > 0
+            ? stray.join('; ')
+            : 'Please fix the highlighted fields.'
+        )
+        return
+      }
+      if (result.reason === 'unauthorized') {
+        setTopError(result.message)
+        return
+      }
+      setTopError(result.message)
+    })
+  }
+
+  // ---------------------------------------------------------------- Render
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-8">
+      {topError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+          {topError}
+        </div>
+      )}
+
+      {topSuccess && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+          {topSuccess}
+        </div>
+      )}
+
+      {/* ----- Top-level summary card -------------------------------- */}
+      <SummaryCard
+        summary={summary}
+        splitPct={event.split_pct}
+        barIncluded={event.bar_included}
+      />
+
+      {/* ----- Expenses by category --------------------------------- */}
+      <section className="space-y-4">
+        <header className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">Expenses</h2>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            Total: {formatUSDCents(summary.est_expenses)}
+          </span>
+        </header>
+
+        <div className="space-y-6">
+          {EXPENSE_CATEGORY_ORDER.map((cat) => {
+            const rows = expenses.filter((e) => e.category === cat)
+            return (
+              <div
+                key={cat}
+                className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+              >
+                <div className="flex items-baseline justify-between border-b border-zinc-200 bg-zinc-50 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {EXPENSE_CATEGORY_LABELS[cat]}
+                  </h3>
+                  <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                    {formatUSDCents(categorySubtotal(cat))}
+                  </span>
+                </div>
+
+                {rows.length === 0 ? (
+                  <p className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                    No lines.
+                  </p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                      <tr className="border-b border-zinc-100 dark:border-zinc-900">
+                        <th className="px-4 py-2 font-medium">Item</th>
+                        <th className="w-24 px-4 py-2 font-medium">Qty</th>
+                        <th className="w-32 px-4 py-2 font-medium">Price</th>
+                        <th className="w-32 px-4 py-2 text-right font-medium">
+                          Total
+                        </th>
+                        <th className="w-10 px-2 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
+                      {rows.map((row) => {
+                        const lineTotal =
+                          (Number(row.qty) || 0) * (Number(row.price) || 0)
+                        const idx = expenses.findIndex(
+                          (e) => e.uid === row.uid
+                        )
+                        return (
+                          <tr key={row.uid}>
+                            <td className="px-4 py-2">
+                              <input
+                                value={row.item}
+                                onChange={(e) =>
+                                  updateExpense(row.uid, {
+                                    item: e.target.value,
+                                  })
+                                }
+                                placeholder={`${EXPENSE_CATEGORY_LABELS[cat]} item`}
+                                className={inputClass(
+                                  fieldErrors[`expenses.${idx}.item`]
+                                )}
+                              />
+                            </td>
+                            <td className="px-4 py-2">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step="0.01"
+                                value={row.qty}
+                                onChange={(e) =>
+                                  updateExpense(row.uid, {
+                                    qty: e.target.value,
+                                  })
+                                }
+                                className={inputClass(
+                                  fieldErrors[`expenses.${idx}.qty`]
+                                )}
+                              />
+                            </td>
+                            <td className="px-4 py-2">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step="0.01"
+                                value={row.price}
+                                onChange={(e) =>
+                                  updateExpense(row.uid, {
+                                    price: e.target.value,
+                                  })
+                                }
+                                className={inputClass(
+                                  fieldErrors[`expenses.${idx}.price`]
+                                )}
+                              />
+                            </td>
+                            <td className="px-4 py-2 text-right text-zinc-700 tabular-nums dark:text-zinc-300">
+                              {formatUSDCents(lineTotal)}
+                            </td>
+                            <td className="px-2 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => removeExpense(row.uid)}
+                                aria-label={`Remove ${row.item || 'line'}`}
+                                className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+                              >
+                                ×
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+
+                <div className="border-t border-zinc-100 px-4 py-2 dark:border-zinc-900">
+                  <button
+                    type="button"
+                    onClick={() => addExpenseInCategory(cat)}
+                    className="text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  >
+                    + Add line
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* ----- Tickets ---------------------------------------------- */}
+      <section className="space-y-4">
+        <header className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold tracking-tight">
+            Ticket tiers
+          </h2>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            {summary.gross_tix_sold} sold ·{' '}
+            {formatUSDCents(summary.gross_tix_total)}
+          </span>
+        </header>
+
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          {tiers.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+              No tiers yet.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                <tr className="border-b border-zinc-100 dark:border-zinc-900">
+                  <th className="w-20 px-4 py-2 font-medium">Tier</th>
+                  <th className="w-32 px-4 py-2 font-medium">Price</th>
+                  <th className="w-32 px-4 py-2 font-medium">Sold</th>
+                  <th className="w-32 px-4 py-2 text-right font-medium">
+                    Total
+                  </th>
+                  <th className="w-10 px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
+                {tiers.map((row, idx) => {
+                  const lineTotal =
+                    (Number(row.price) || 0) * (Number(row.sold) || 0)
+                  return (
+                    <tr key={row.uid}>
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={8}
+                          step="1"
+                          value={row.tier_number}
+                          onChange={(e) =>
+                            updateTier(row.uid, {
+                              tier_number: Number(e.target.value),
+                            })
+                          }
+                          className={inputClass(
+                            fieldErrors[`tiers.${idx}.tier_number`]
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="0.01"
+                          value={row.price}
+                          onChange={(e) =>
+                            updateTier(row.uid, { price: e.target.value })
+                          }
+                          className={inputClass(
+                            fieldErrors[`tiers.${idx}.price`]
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          step="1"
+                          value={row.sold}
+                          onChange={(e) =>
+                            updateTier(row.uid, { sold: e.target.value })
+                          }
+                          className={inputClass(
+                            fieldErrors[`tiers.${idx}.sold`]
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-right text-zinc-700 tabular-nums dark:text-zinc-300">
+                        {formatUSDCents(lineTotal)}
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeTier(row.uid)}
+                          aria-label={`Remove tier ${row.tier_number}`}
+                          className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+                        >
+                          ×
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+
+          <div className="border-t border-zinc-100 px-4 py-2 dark:border-zinc-900">
+            <button
+              type="button"
+              onClick={addTier}
+              disabled={tiers.length >= 8}
+              className="text-xs font-medium text-zinc-600 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              + Add tier
+            </button>
+            {tiers.length >= 8 && (
+              <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-500">
+                Maximum 8 tiers.
+              </span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ----- Merch ------------------------------------------------- */}
+      <section className="space-y-4">
+        <header className="flex items-baseline justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Merch</h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Per-event merch knobs. Defaults are ${MERCH_GROSS_DEFAULT} gross,{' '}
+              {Math.round(MERCH_PCT_AFTER_FEES * 100)}% after fees,{' '}
+              {Math.round(MERCH_COGS_PCT * 100)}% COGS, ${MERCH_SELLER_FEE}{' '}
+              seller fee.
+            </p>
+          </div>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            Net merch:{' '}
+            <strong
+              className={
+                summary.net_merch >= 0
+                  ? 'text-zinc-900 dark:text-zinc-100'
+                  : 'text-red-700 dark:text-red-300'
+              }
+            >
+              {formatUSDCents(summary.net_merch)}
+            </strong>
+          </span>
+        </header>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <NumberField
+            label="Merch gross ($)"
+            help={`${formatUSDCents(summary.merch_per_head)} / paid attendee (calculated)`}
+            value={merchGross}
+            onChange={setMerchGross}
+            error={fieldErrors.merch_gross}
+          />
+          <NumberField
+            label="After-fees %"
+            help="Share of merch gross that survives platform fees."
+            value={merchPctAfterFees}
+            onChange={setMerchPctAfterFees}
+            error={fieldErrors.merch_pct_after_fees}
+            max={100}
+          />
+          <NumberField
+            label="COGS %"
+            help="Cost of goods as a share of merch gross."
+            value={merchCogsPct}
+            onChange={setMerchCogsPct}
+            error={fieldErrors.merch_cogs_pct}
+            max={100}
+          />
+          <NumberField
+            label="Seller fee ($)"
+            help="Flat fee deducted from merch."
+            value={merchSellerFee}
+            onChange={setMerchSellerFee}
+            error={fieldErrors.merch_seller_fee}
+          />
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3 lg:grid-cols-5">
+            <MerchLine
+              label="Merch gross"
+              value={formatUSDCents(summary.merch_gross)}
+            />
+            <MerchLine
+              label="Per paid attendee"
+              value={
+                summary.paid_attendance > 0
+                  ? `${formatUSDCents(summary.merch_per_head)} / head`
+                  : '— / head'
+              }
+            />
+            <MerchLine
+              label="After fees"
+              value={formatUSDCents(summary.merch_net_after_fees)}
+            />
+            <MerchLine
+              label="COGS"
+              value={`− ${formatUSDCents(summary.merch_cogs)}`}
+            />
+            <MerchLine
+              label="Seller fee"
+              value={`− ${formatUSDCents(summary.merch_seller_fee)}`}
+            />
+          </dl>
+        </div>
+      </section>
+
+      {/* ----- Income inputs ---------------------------------------- */}
+      <section className="space-y-4">
+        <header>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Income inputs
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Drives the income summary above. Bar knobs (${BAR_PER_HEAD}/head,{' '}
+            LosGothsCo bar {Math.round(LOSGOTHSCO_BAR_PCT * 100)}%) are
+            org-wide defaults — Phase 14 will let you override them per
+            event.
+          </p>
+        </header>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <NumberField
+            label="Drop-off"
+            help="Tickets sold but holder didn't show. Subtracted from gross sold."
+            value={dropOff}
+            onChange={setDropOff}
+            error={fieldErrors.drop_off}
+          />
+          <NumberField
+            label="Guests"
+            help="Comp / guest list — added to total attendance."
+            value={guests}
+            onChange={setGuests}
+            error={fieldErrors.guests}
+          />
+          <NumberField
+            label="Deductions"
+            help="Flat $ subtracted from walkout."
+            value={deductions}
+            onChange={setDeductions}
+            error={fieldErrors.deductions}
+          />
+          <NumberField
+            label="Sponsor income"
+            help="Flat $ added to estimated income."
+            value={sponsorIncome}
+            onChange={setSponsorIncome}
+            error={fieldErrors.sponsor_income}
+          />
+          <NumberField
+            label="Vendor income"
+            help="Flat $ added to estimated income."
+            value={vendorIncome}
+            onChange={setVendorIncome}
+            error={fieldErrors.vendor_income}
+          />
+        </div>
+      </section>
+
+      {/* ----- Save bar --------------------------------------------- */}
+      <div className="sticky bottom-4 z-10">
+        <div className="flex items-center justify-end gap-3 rounded-xl border border-zinc-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+          <span className="text-sm text-zinc-600 dark:text-zinc-400">
+            Est. profit:{' '}
+            <strong
+              className={
+                summary.est_profit >= 0
+                  ? 'text-emerald-700 dark:text-emerald-300'
+                  : 'text-red-700 dark:text-red-300'
+              }
+            >
+              {formatUSD(summary.est_profit)}
+            </strong>
+          </span>
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            {pending ? 'Saving…' : 'Save budget'}
+          </button>
+        </div>
+      </div>
+    </form>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function SummaryCard({
+  summary,
+  splitPct,
+  barIncluded,
+}: {
+  summary: ReturnType<typeof computeBudget>
+  splitPct: number
+  barIncluded: boolean
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <SummaryStat label="Est. income" value={formatUSD(summary.est_income)} />
+        <SummaryStat
+          label="Est. expenses"
+          value={formatUSD(summary.est_expenses)}
+        />
+        <SummaryStat
+          label="Est. profit"
+          value={formatUSD(summary.est_profit)}
+          tone={summary.est_profit >= 0 ? 'positive' : 'negative'}
+        />
+        <SummaryStat
+          label="Walkout"
+          value={formatUSD(summary.walkout)}
+          help={`Tix net @ ${splitPct}% + bar − deductions`}
+        />
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-4 text-xs sm:grid-cols-3 lg:grid-cols-6 dark:border-zinc-900">
+        <Mini label="Tix sold" value={String(summary.gross_tix_sold)} />
+        <Mini label="Paid attendance" value={String(summary.paid_attendance)} />
+        <Mini label="Total attendance" value={String(summary.total_attendance)} />
+        <Mini label="Gross tix" value={formatUSDCents(summary.gross_tix_total)} />
+        <Mini
+          label="LGCo tix net"
+          value={formatUSDCents(summary.losgothsco_tix_net)}
+        />
+        <Mini
+          label="Bar gross"
+          value={
+            barIncluded ? formatUSDCents(summary.bar_gross) : 'Not included'
+          }
+          muted={!barIncluded}
+        />
+        <Mini
+          label="LGCo bar"
+          value={
+            barIncluded ? formatUSDCents(summary.losgothsco_bar) : '—'
+          }
+          muted={!barIncluded}
+        />
+        <Mini
+          label="Net merch"
+          value={formatUSDCents(summary.net_merch)}
+          tone={summary.net_merch >= 0 ? undefined : 'negative'}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SummaryStat({
+  label,
+  value,
+  help,
+  tone,
+}: {
+  label: string
+  value: string
+  help?: string
+  tone?: 'positive' | 'negative'
+}) {
+  const valueClass =
+    tone === 'positive'
+      ? 'text-emerald-700 dark:text-emerald-300'
+      : tone === 'negative'
+        ? 'text-red-700 dark:text-red-300'
+        : 'text-zinc-900 dark:text-zinc-100'
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        {label}
+      </p>
+      <p className={`mt-0.5 text-lg font-semibold tabular-nums ${valueClass}`}>
+        {value}
+      </p>
+      {help && (
+        <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+          {help}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function Mini({
+  label,
+  value,
+  muted,
+  tone,
+}: {
+  label: string
+  value: string
+  muted?: boolean
+  tone?: 'negative'
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
+        {label}
+      </p>
+      <p
+        className={`tabular-nums ${
+          muted
+            ? 'text-zinc-400 dark:text-zinc-600'
+            : tone === 'negative'
+              ? 'text-red-700 dark:text-red-300'
+              : 'text-zinc-700 dark:text-zinc-300'
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function NumberField({
+  label,
+  help,
+  value,
+  onChange,
+  error,
+  max,
+}: {
+  label: string
+  help?: string
+  value: string
+  onChange: (next: string) => void
+  error?: string
+  max?: number
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+        {label}
+      </span>
+      <input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        max={max}
+        step="0.01"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`mt-1 w-full ${inputClass(error)}`}
+      />
+      {help && (
+        <span className="mt-1 block text-[10px] text-zinc-500 dark:text-zinc-500">
+          {help}
+        </span>
+      )}
+      {error && (
+        <span className="mt-1 block text-xs text-red-700 dark:text-red-300">
+          {error}
+        </span>
+      )}
+    </label>
+  )
+}
+
+function MerchLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
+        {label}
+      </dt>
+      <dd className="tabular-nums text-zinc-700 dark:text-zinc-300">{value}</dd>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function inputClass(err?: string): string {
+  return [
+    'rounded-md border bg-white px-2 py-1 text-sm text-zinc-900 shadow-sm outline-none focus:ring-1 dark:bg-zinc-900 dark:text-zinc-100',
+    err
+      ? 'border-red-400 focus:border-red-500 focus:ring-red-300 dark:border-red-700 dark:focus:border-red-500 dark:focus:ring-red-700'
+      : 'border-zinc-300 focus:border-zinc-500 focus:ring-zinc-300 dark:border-zinc-700 dark:focus:border-zinc-500 dark:focus:ring-zinc-700',
+  ].join(' ')
+}
+
+/** Anything not in the known list lands in 'staff' as a safe default. */
+function normalizeCategory(cat: string): ExpenseCategory {
+  return (EXPENSE_CATEGORY_ORDER as readonly string[]).includes(cat)
+    ? (cat as ExpenseCategory)
+    : 'staff'
+}

@@ -108,13 +108,21 @@ export default async function EditEventPage({
           </Link>
         </div>
 
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Edit event
-          </h1>
-          <p className="font-mono text-xs text-zinc-500 dark:text-zinc-500">
-            {event.event_id}
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Edit event
+            </h1>
+            <p className="font-mono text-xs text-zinc-500 dark:text-zinc-500">
+              {event.event_id}
+            </p>
+          </div>
+          <Link
+            href={`/events/${id}/budget`}
+            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Budget →
+          </Link>
         </header>
 
         <EditEventForm

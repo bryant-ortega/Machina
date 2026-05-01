@@ -35,9 +35,12 @@ import {
  *   6. UPDATE events row, including a regenerated event_id when
  *        date/city/state changed (option B: auto-update).
  *
- * Budget rows (event_budgets / event_budget_expenses) are NOT touched here.
- * They were seeded at creation time and are admin-editable starting in
- * Phase 9. Slot edits don't auto-sync DJ expense lines.
+ * Budget scalars and non-DJ expense lines are NOT touched here — those are
+ * admin-edited on the budget page (Phase 9). The ONE exception is the DJ
+ * expense section: every save rebuilds category='djs' lines from the
+ * current slot list so the budget can never drift out of sync with the
+ * roster (delete all 'djs' rows, re-insert one per slot at the slot's
+ * rate). Admins edit DJ prices on the event edit form, not on the budget.
  *
  * Auth: re-checks admin role server-side (defence in depth on top of the
  * (admin) layout gate). DB writes go through a service-role client so the
@@ -430,6 +433,74 @@ export async function updateEvent(
     }
   }
 
+  // 3g.5. Rebuild DJ expense lines on the estimated budget so the
+  // budget's DJ section is always lock-step with the slot roster. This
+  // mirrors what createEvent does at insert time, just using a wipe +
+  // re-insert instead of a row-by-row diff (DJ expense rows have no
+  // user-editable fields beyond what's on the slot itself, so a clean
+  // rebuild is simpler and can't drift). If the event somehow doesn't
+  // have an estimated budget yet we skip silently — the budget page
+  // 404s in that case anyway.
+  {
+    const { data: budgetRow, error: bqErr } = await admin
+      .from('event_budgets')
+      .select('id')
+      .eq('event_id', data.id)
+      .eq('budget_type', 'estimated')
+      .maybeSingle()
+    if (bqErr) {
+      return { ok: false, reason: 'db_failed', message: bqErr.message }
+    }
+    if (budgetRow) {
+      const budgetId = budgetRow.id as string
+
+      // Wipe existing DJ expense rows for this budget.
+      const { error: delDjErr } = await admin
+        .from('event_budget_expenses')
+        .delete()
+        .eq('budget_id', budgetId)
+        .eq('category', 'djs')
+      if (delDjErr) {
+        return { ok: false, reason: 'db_failed', message: delDjErr.message }
+      }
+
+      // Re-insert one row per current slot, with the DJ name + slot rate.
+      if (data.slots.length > 0) {
+        const djIds = Array.from(new Set(data.slots.map((s) => s.dj_id)))
+        const { data: djRows, error: djErr } = await admin
+          .from('djs')
+          .select('id, dj_name')
+          .in('id', djIds)
+        if (djErr) {
+          return { ok: false, reason: 'db_failed', message: djErr.message }
+        }
+        const djNameById = new Map(
+          (djRows ?? []).map((r) => [r.id as string, r.dj_name as string])
+        )
+
+        const djExpenseRows = data.slots.map((slot) => {
+          const djName = djNameById.get(slot.dj_id) ?? 'DJ'
+          const rate =
+            slot.rate ?? SLOT_DEFAULT_RATES[slot.slot_type as SlotType] ?? 0
+          return {
+            budget_id: budgetId,
+            category: 'djs' as const,
+            item: djName,
+            qty: 1,
+            price: rate,
+          }
+        })
+
+        const { error: insDjErr } = await admin
+          .from('event_budget_expenses')
+          .insert(djExpenseRows)
+        if (insDjErr) {
+          return { ok: false, reason: 'db_failed', message: insDjErr.message }
+        }
+      }
+    }
+  }
+
   // 3h. Build derived event fields. Auto-regenerate event_id whenever
   // the date/city/state changes (option B from the design call).
   const dateChanged = data.date !== existing.date
@@ -488,6 +559,7 @@ export async function updateEvent(
   // 4. Cache invalidation.
   revalidatePath('/events')
   revalidatePath(`/events/${data.id}/edit`)
+  revalidatePath(`/events/${data.id}/budget`)
 
   return { ok: true, eventId: data.id, eventCode: newEventCode }
 }
