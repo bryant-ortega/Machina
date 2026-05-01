@@ -1,12 +1,22 @@
 import Link from 'next/link'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 /**
- * Placeholder events index. Phase 7b replaces this with the real list view.
+ * Admin events index. Lists every event, upcoming first, with the most
+ * actionable columns visible inline. Each row links into the edit form
+ * (/events/[id]/edit) which is the workhorse page for the rest of the
+ * platform.
  *
- * For now we expose a "+ New event" link so the create form is reachable,
- * and we render a green flash banner when the URL carries `?created=<code>`
- * — the create form redirects here on success since /events/[id] is still
- * stubbed (lands in Phase 7b).
+ * Sort order:
+ *   1. Upcoming events ascending (next event first)
+ *   2. Past events descending (most recent past first)
+ *
+ * Calendar/Month/Year views ship in Phase 8.
+ *
+ * The green "Created event …" flash banner is shown when the URL carries
+ * `?created=<event_code>` — emitted by the create form's success redirect.
+ *
+ * Auth gate: handled by the (admin) layout.
  */
 export default async function EventsPage({
   searchParams,
@@ -14,12 +24,59 @@ export default async function EventsPage({
   searchParams: Promise<{ created?: string }>
 }) {
   const { created } = await searchParams
+  const supabase = await createServerSupabaseClient()
+
+  // Pull every column the table needs, plus the joined venue name. The
+  // events table is small (one row per event), so an unbounded fetch is
+  // fine here — paginate later if/when this grows past a thousand rows.
+  const { data: rawEvents } = await supabase
+    .from('events')
+    .select(
+      'id, date, event_id, title, type, status, stages, weekend_flag, city, state, venues(name)'
+    )
+
+  type RawEvent = {
+    id: string
+    date: string
+    event_id: string
+    title: string
+    type: string
+    status: string
+    stages: number
+    weekend_flag: string
+    city: string
+    state: string
+    venues: { name: string } | { name: string }[] | null
+  }
+
+  // Upcoming-first sort. Today and forward sorted ascending; everything
+  // before today sorted descending. We compare ISO date strings directly,
+  // so the cutoff is a UTC-anchored "today".
+  const today = new Date().toISOString().slice(0, 10)
+  const events = ((rawEvents ?? []) as RawEvent[])
+    .map((e) => ({
+      ...e,
+      venueName: Array.isArray(e.venues) ? e.venues[0]?.name : e.venues?.name,
+    }))
+    .sort((a, b) => {
+      const aFuture = a.date >= today
+      const bFuture = b.date >= today
+      if (aFuture && bFuture) return a.date < b.date ? -1 : 1 // ascending
+      if (!aFuture && !bFuture) return a.date < b.date ? 1 : -1 // descending
+      return aFuture ? -1 : 1 // future events float above past events
+    })
 
   return (
     <div className="flex-1 px-8 py-10">
-      <div className="mx-auto max-w-5xl space-y-4">
+      <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight">Events</h1>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Events</h1>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {events.length}{' '}
+              {events.length === 1 ? 'event' : 'events'} total. Upcoming first.
+            </p>
+          </div>
           <Link
             href="/events/new"
             className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
@@ -30,15 +87,161 @@ export default async function EventsPage({
 
         {created ? (
           <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">
-            ✓ Created event <span className="font-mono font-semibold">{created}</span>
+            ✓ Created event{' '}
+            <span className="font-mono font-semibold">{created}</span>
           </div>
         ) : null}
 
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          The events list view ships in Phase 7b. For now, use &ldquo;New
-          event&rdquo; to create one.
-        </p>
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          <table className="w-full text-sm">
+            <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+              <tr>
+                <th className="px-4 py-2.5 font-medium">Date</th>
+                <th className="px-4 py-2.5 font-medium">Event ID</th>
+                <th className="px-4 py-2.5 font-medium">Title</th>
+                <th className="px-4 py-2.5 font-medium">Venue</th>
+                <th className="px-4 py-2.5 font-medium">City</th>
+                <th className="px-4 py-2.5 font-medium">Type</th>
+                <th className="px-4 py-2.5 font-medium">Stages</th>
+                <th className="px-4 py-2.5 font-medium">Weekend</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
+              {events.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="px-4 py-10 text-center text-zinc-500 dark:text-zinc-400"
+                  >
+                    No events yet.{' '}
+                    <Link
+                      href="/events/new"
+                      className="underline hover:text-zinc-900 dark:hover:text-zinc-100"
+                    >
+                      Create the first one.
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                events.map((e) => (
+                  <tr
+                    key={e.id}
+                    className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                  >
+                    <td className="whitespace-nowrap px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block"
+                      >
+                        {new Date(`${e.date}T00:00:00`).toLocaleDateString(
+                          undefined,
+                          {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          }
+                        )}
+                      </Link>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                      <Link href={`/events/${e.id}/edit`} className="block">
+                        {e.event_id}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="font-medium text-zinc-900 hover:underline dark:text-zinc-100"
+                      >
+                        {e.title}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block"
+                      >
+                        {e.venueName ?? '—'}
+                      </Link>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block"
+                      >
+                        {e.city}, {e.state}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block capitalize"
+                      >
+                        {e.type}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block"
+                      >
+                        {e.stages}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block"
+                      >
+                        <WeekendBadge flag={e.weekend_flag} />
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block"
+                      >
+                        <StatusBadge status={e.status} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const isConfirmed = status === 'confirmed'
+  return (
+    <span
+      className={
+        isConfirmed
+          ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
+          : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200'
+      }
+    >
+      {status}
+    </span>
+  )
+}
+
+function WeekendBadge({ flag }: { flag: string }) {
+  const good = flag === 'good'
+  return (
+    <span
+      className={
+        good
+          ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
+          : 'rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+      }
+    >
+      {flag}
+    </span>
   )
 }
