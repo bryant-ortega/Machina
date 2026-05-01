@@ -339,3 +339,192 @@ export async function updateBudget(
 
   return { ok: true }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 10 — Actualize event
+// ---------------------------------------------------------------------------
+
+/**
+ * Admin "actualizes" an event after it happens: clones the estimated
+ * budget into a brand-new event_budgets row with budget_type='final',
+ * copying the scalar inputs, every expense line, and every tix tier
+ * verbatim. The admin then edits the final row to reflect what
+ * actually happened, and the compare view (Phase 10.4) shows
+ * Est / Final / Δ side by side.
+ *
+ * Single-shot: the (event_id, budget_type) UNIQUE constraint blocks a
+ * second 'final' row, so this action refuses up front if one already
+ * exists. Phase 14's override system will eventually expose a "reset
+ * to estimated" path; until then, recovering from a bad actualize
+ * means deleting the final row in the DB.
+ */
+const ActualizeEventInput = z.object({
+  event_id: z.string().regex(UUID_LIKE, 'Invalid event id'),
+})
+
+export type ActualizeEventResult =
+  | { ok: true; finalBudgetId: string }
+  | { ok: false; reason: 'unauthorized'; message: string }
+  | { ok: false; reason: 'not_found'; message: string }
+  | { ok: false; reason: 'already_final'; message: string }
+  | { ok: false; reason: 'invalid'; message: string }
+  | { ok: false; reason: 'db_failed'; message: string }
+
+export async function actualizeEvent(
+  raw: unknown
+): Promise<ActualizeEventResult> {
+  // 1. Auth + admin gate.
+  const supabase = await createServerSupabaseClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { ok: false, reason: 'unauthorized', message: 'Not signed in.' }
+  }
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (profile?.role !== 'admin') {
+    return { ok: false, reason: 'unauthorized', message: 'Admin only.' }
+  }
+
+  // 2. Validate.
+  const parsed = ActualizeEventInput.safeParse(raw)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      message: parsed.error.issues[0]?.message ?? 'Invalid input.',
+    }
+  }
+  const { event_id } = parsed.data
+
+  // 3. Service-role client (matching the rest of this file).
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  // 4. Pull the estimated budget (the source of truth we copy from).
+  const { data: estBudget, error: ebErr } = await admin
+    .from('event_budgets')
+    .select(
+      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee'
+    )
+    .eq('event_id', event_id)
+    .eq('budget_type', 'estimated')
+    .maybeSingle()
+  if (ebErr) {
+    return { ok: false, reason: 'db_failed', message: ebErr.message }
+  }
+  if (!estBudget) {
+    return {
+      ok: false,
+      reason: 'not_found',
+      message: 'No estimated budget exists for this event.',
+    }
+  }
+
+  // 5. Refuse if a final already exists. (UNIQUE would catch us anyway,
+  //    but a polite up-front check beats a raw constraint error.)
+  const { data: existingFinal, error: efErr } = await admin
+    .from('event_budgets')
+    .select('id')
+    .eq('event_id', event_id)
+    .eq('budget_type', 'final')
+    .maybeSingle()
+  if (efErr) {
+    return { ok: false, reason: 'db_failed', message: efErr.message }
+  }
+  if (existingFinal) {
+    return {
+      ok: false,
+      reason: 'already_final',
+      message: 'This event has already been actualized.',
+    }
+  }
+
+  // 6. Insert the final budget row, copying scalars verbatim.
+  const { data: finalRow, error: finsErr } = await admin
+    .from('event_budgets')
+    .insert({
+      event_id,
+      budget_type: 'final',
+      created_by: profile.id,
+      drop_off: estBudget.drop_off,
+      guests: estBudget.guests,
+      deductions: estBudget.deductions,
+      sponsor_income: estBudget.sponsor_income,
+      vendor_income: estBudget.vendor_income,
+      merch_gross: estBudget.merch_gross,
+      merch_pct_after_fees: estBudget.merch_pct_after_fees,
+      merch_cogs_pct: estBudget.merch_cogs_pct,
+      merch_seller_fee: estBudget.merch_seller_fee,
+    })
+    .select('id')
+    .single()
+  if (finsErr || !finalRow) {
+    return {
+      ok: false,
+      reason: 'db_failed',
+      message: finsErr?.message ?? 'Final budget insert failed',
+    }
+  }
+  const finalBudgetId = finalRow.id as string
+
+  // 7. Copy expenses.
+  const { data: srcExpenses, error: seErr } = await admin
+    .from('event_budget_expenses')
+    .select('category, item, qty, price')
+    .eq('budget_id', estBudget.id)
+  if (seErr) {
+    return { ok: false, reason: 'db_failed', message: seErr.message }
+  }
+  if ((srcExpenses ?? []).length > 0) {
+    const { error: ieErr } = await admin
+      .from('event_budget_expenses')
+      .insert(
+        (srcExpenses ?? []).map((e) => ({
+          budget_id: finalBudgetId,
+          category: e.category as string,
+          item: e.item as string,
+          qty: e.qty as number,
+          price: e.price as number,
+        }))
+      )
+    if (ieErr) {
+      return { ok: false, reason: 'db_failed', message: ieErr.message }
+    }
+  }
+
+  // 8. Copy tix tiers.
+  const { data: srcTiers, error: stErr } = await admin
+    .from('event_tix_tiers')
+    .select('tier_number, price, sold')
+    .eq('budget_id', estBudget.id)
+  if (stErr) {
+    return { ok: false, reason: 'db_failed', message: stErr.message }
+  }
+  if ((srcTiers ?? []).length > 0) {
+    const { error: itErr } = await admin.from('event_tix_tiers').insert(
+      (srcTiers ?? []).map((t) => ({
+        budget_id: finalBudgetId,
+        tier_number: t.tier_number as number,
+        price: t.price as number,
+        sold: t.sold as number,
+      }))
+    )
+    if (itErr) {
+      return { ok: false, reason: 'db_failed', message: itErr.message }
+    }
+  }
+
+  // 9. Cache invalidation.
+  revalidatePath(`/events/${event_id}/budget`)
+  revalidatePath('/events')
+
+  return { ok: true, finalBudgetId }
+}
