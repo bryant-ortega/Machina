@@ -236,6 +236,8 @@ function prettySlot(slot: string): string {
       return 'Headline'
     case 'close':
       return 'Close'
+    case 'resident':
+      return 'Resident'
     default:
       return slot
   }
