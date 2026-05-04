@@ -1,28 +1,31 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 /**
  * Set a new password after clicking the link in the recovery email.
  *
- * The recovery email lands here directly. Supabase's JS client auto-
- * detects the recovery token from the URL on mount — whether it arrives
- * as a `?code=...` query param (PKCE flow) or as a `#access_token=...`
- * URL fragment (implicit flow). We don't need to know which is in use;
- * we just listen for the PASSWORD_RECOVERY auth event and unlock the
- * form when it fires.
+ * The recovery email lands here directly (or is forwarded here from /
+ * via _root-redirect.tsx, which preserves the URL hash). Supabase's JS
+ * client auto-detects the recovery token from the URL on mount —
+ * whether it arrives as `?code=...` query (PKCE) or `#access_token=...`
+ * fragment (implicit flow). We don't need to know which is in use; we
+ * just listen for the PASSWORD_RECOVERY auth event and unlock the form.
  *
- * If we don't see a recovery event within a short grace period and the
- * user has no existing session, bounce to /login — the user probably
- * hit this URL directly, not via a recovery email.
+ * UX: render explicit loading / ready / not-recovery states. No silent
+ * timer-based bouncing — that's confusing for the user. If the user
+ * arrived without a recovery code we just say so and link to /login.
  */
 export default function ResetPasswordPage() {
   const router = useRouter()
-  const supabase = createClient()
-  const [ready, setReady] = useState(false)
+  // Memoize the client so re-renders don't churn the auth listener.
+  const supabase = useMemo(() => createClient(), [])
+
+  type Phase = 'checking' | 'ready' | 'no_recovery'
+  const [phase, setPhase] = useState<Phase>('checking')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [pending, setPending] = useState(false)
@@ -32,40 +35,41 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let cancelled = false
 
-    // Subscribe to auth state changes. Supabase fires PASSWORD_RECOVERY
-    // when a recovery URL is detected.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event) => {
-        if (cancelled) return
-        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-          setReady(true)
-        }
+    // Listen for the recovery / signed-in events that fire once the
+    // supabase client has finished processing the URL.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (cancelled) return
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        setPhase('ready')
       }
+    })
+
+    // The events above sometimes fire before we subscribe (URL was
+    // processed during client construction). Poll for an existing
+    // session once with a short delay and a longer fallback.
+    const checks = [200, 500, 1500, 3500].map((ms) =>
+      setTimeout(async () => {
+        if (cancelled) return
+        const { data: { session } } = await supabase.auth.getSession()
+        if (cancelled) return
+        if (session) {
+          setPhase('ready')
+        } else if (ms === 3500) {
+          // After ~3.5s with no session and no PASSWORD_RECOVERY event,
+          // there's no recovery to complete. Show the no-recovery state.
+          setPhase((prev) => (prev === 'checking' ? 'no_recovery' : prev))
+        }
+      }, ms)
     )
-
-    // Also handle the case where the recovery code was processed before
-    // we subscribed: check for an existing session after a tick.
-    const checkTimer = setTimeout(async () => {
-      if (cancelled) return
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) setReady(true)
-    }, 200)
-
-    // Fallback: if neither the event nor a session shows up after 2s,
-    // the user probably arrived without a recovery code.
-    const bailTimer = setTimeout(async () => {
-      if (cancelled) return
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) router.replace('/login?error=no_recovery_session')
-    }, 2000)
 
     return () => {
       cancelled = true
       subscription.unsubscribe()
-      clearTimeout(checkTimer)
-      clearTimeout(bailTimer)
+      checks.forEach(clearTimeout)
     }
-  }, [router, supabase])
+  }, [supabase])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -88,7 +92,6 @@ export default function ResetPasswordPage() {
       return
     }
     setDone(true)
-    // Drop them on /login after a beat so the messaging lands.
     setTimeout(() => router.replace('/login'), 1500)
   }
 
@@ -116,8 +119,31 @@ export default function ResetPasswordPage() {
               Go to sign in
             </Link>
           </div>
-        ) : !ready ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-500">Loading…</p>
+        ) : phase === 'checking' ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-500">
+            Verifying recovery link…
+          </p>
+        ) : phase === 'no_recovery' ? (
+          <div className="space-y-4">
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+              We couldn&apos;t find a valid recovery link in this URL. Recovery
+              links work only once and expire — request a fresh one if needed.
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <Link
+                href="/forgot-password"
+                className="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-zinc-50 hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                Send a new link
+              </Link>
+              <Link
+                href="/login"
+                className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Back to sign in
+              </Link>
+            </div>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
