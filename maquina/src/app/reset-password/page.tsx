@@ -31,23 +31,13 @@ export default function ResetPasswordPage() {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
-  // Diagnostic log so we can see what's actually happening when this
-  // flow misbehaves. Rendered at the bottom of the page in dev/preview.
-  const [debug, setDebug] = useState<string[]>([])
-  const log = (msg: string) =>
-    setDebug((prev) => [...prev, `${new Date().toISOString().slice(11, 23)} ${msg}`])
 
   useEffect(() => {
     let cancelled = false
-    log(`URL: ${window.location.href}`)
-    log(`search: ${window.location.search || '(none)'}`)
-    log(`hash: ${window.location.hash || '(none)'}`)
-
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((event) => {
       if (cancelled) return
-      log(`auth event: ${event} (session=${session ? 'yes' : 'no'})`)
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
         setPhase('ready')
       }
@@ -62,14 +52,11 @@ export default function ResetPasswordPage() {
       const params = new URLSearchParams(window.location.search)
       const code = params.get('code')
       if (code) {
-        log(`found ?code=, calling exchangeCodeForSession`)
-        const { error: exchErr } =
-          await supabase.auth.exchangeCodeForSession(code)
-        if (exchErr) {
-          log(`exchange error: ${exchErr.message}`)
-        } else {
-          log('exchange succeeded')
-        }
+        // Errors fall through to the no_recovery state via the session
+        // poll below — surfacing the raw exchange error here doesn't
+        // help the user, and successful exchange triggers an auth event
+        // that flips the page to ready.
+        await supabase.auth.exchangeCodeForSession(code)
         return
       }
 
@@ -81,20 +68,8 @@ export default function ResetPasswordPage() {
       const access_token = hashParams.get('access_token')
       const refresh_token = hashParams.get('refresh_token')
       if (access_token && refresh_token) {
-        log('found #access_token, calling setSession')
-        const { error: setErr } = await supabase.auth.setSession({
-          access_token,
-          refresh_token,
-        })
-        if (setErr) {
-          log(`setSession error: ${setErr.message}`)
-        } else {
-          log('setSession succeeded')
-        }
-        return
+        await supabase.auth.setSession({ access_token, refresh_token })
       }
-
-      log('no recovery token found in URL')
     })()
 
     const checks = [200, 500, 1500, 3500].map((ms) =>
@@ -102,7 +77,6 @@ export default function ResetPasswordPage() {
         if (cancelled) return
         const { data: { session } } = await supabase.auth.getSession()
         if (cancelled) return
-        log(`+${ms}ms session check: ${session ? 'present' : 'none'}`)
         if (session) {
           setPhase('ready')
         } else if (ms === 3500) {
@@ -116,7 +90,6 @@ export default function ResetPasswordPage() {
       subscription.unsubscribe()
       checks.forEach(clearTimeout)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -246,20 +219,6 @@ export default function ResetPasswordPage() {
           </form>
         )}
 
-        {/* Diagnostic log — visible while we're nailing down the recovery
-            flow. Safe to remove once the flow is reliable. */}
-        {debug.length > 0 && (
-          <details className="mt-4 rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
-            <summary className="cursor-pointer font-mono text-zinc-600 dark:text-zinc-400">
-              debug ({debug.length})
-            </summary>
-            <ol className="mt-2 space-y-0.5 font-mono text-[10px] leading-tight text-zinc-700 dark:text-zinc-300">
-              {debug.map((line, i) => (
-                <li key={i} className="break-all">{line}</li>
-              ))}
-            </ol>
-          </details>
-        )}
       </div>
     </div>
   )
