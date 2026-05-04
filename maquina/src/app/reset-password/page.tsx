@@ -8,13 +8,16 @@ import { createClient } from '@/lib/supabase/client'
 /**
  * Set a new password after clicking the link in the recovery email.
  *
- * Precondition: the user already exchanged their recovery code at
- * /auth/callback, which sets a recovery session. That session lets us
- * call updateUser({ password }) — but for nothing else.
+ * The recovery email lands here directly. Supabase's JS client auto-
+ * detects the recovery token from the URL on mount — whether it arrives
+ * as a `?code=...` query param (PKCE flow) or as a `#access_token=...`
+ * URL fragment (implicit flow). We don't need to know which is in use;
+ * we just listen for the PASSWORD_RECOVERY auth event and unlock the
+ * form when it fires.
  *
- * We verify the recovery session is present on mount; if not (the user
- * hit this URL directly without going through the recovery email), bounce
- * them to /login.
+ * If we don't see a recovery event within a short grace period and the
+ * user has no existing session, bounce to /login — the user probably
+ * hit this URL directly, not via a recovery email.
  */
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -28,16 +31,39 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let cancelled = false
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (cancelled) return
-      if (!session) {
-        router.replace('/login')
-        return
+
+    // Subscribe to auth state changes. Supabase fires PASSWORD_RECOVERY
+    // when a recovery URL is detected.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event) => {
+        if (cancelled) return
+        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+          setReady(true)
+        }
       }
-      setReady(true)
-    })
+    )
+
+    // Also handle the case where the recovery code was processed before
+    // we subscribed: check for an existing session after a tick.
+    const checkTimer = setTimeout(async () => {
+      if (cancelled) return
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) setReady(true)
+    }, 200)
+
+    // Fallback: if neither the event nor a session shows up after 2s,
+    // the user probably arrived without a recovery code.
+    const bailTimer = setTimeout(async () => {
+      if (cancelled) return
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) router.replace('/login?error=no_recovery_session')
+    }, 2000)
+
     return () => {
       cancelled = true
+      subscription.unsubscribe()
+      clearTimeout(checkTimer)
+      clearTimeout(bailTimer)
     }
   }, [router, supabase])
 

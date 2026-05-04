@@ -30,8 +30,11 @@ export default function ForgotPasswordPage() {
     setErrorMessage(null)
 
     const supabase = createClient()
+    // Send the user straight to /reset-password — Supabase's JS client
+    // auto-detects the recovery token (whether it lands as ?code=... or
+    // a #access_token=... fragment) when the page mounts.
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
+      redirectTo: `${window.location.origin}/reset-password`,
     })
     if (error) {
       setStatus('error')
