@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Machina",
+  title: "Maquina",
   description: "LosGothsCo Enterprise — internal event operations platform.",
   robots: {
     index: false,

@@ -46,7 +46,7 @@ export default async function AdminLayout({
     <div className="flex min-h-screen flex-1 bg-zinc-50 dark:bg-zinc-950">
       <aside className="flex w-60 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
         <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-          <p className="text-sm font-semibold tracking-tight">Machina</p>
+          <p className="text-sm font-semibold tracking-tight">Maquina</p>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             LosGothsCo Enterprise
           </p>

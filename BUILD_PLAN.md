@@ -1,4 +1,4 @@
-# Machina — BUILD_PLAN.md
+# Maquina — BUILD_PLAN.md
 ### Claude Cowork Build Instructions for LosGothsCo Event Operations Platform
 
 > This document is the step-by-step build guide for Claude Cowork.
@@ -9,14 +9,14 @@
 
 ## Repository Structure Note
 
-The Next.js app lives in `/machina`.
+The Next.js app lives in `/maquina`.
 
 All commands, paths, and file references in this document
-should be executed relative to `/machina`, not the repo root.
+should be executed relative to `/maquina`, not the repo root.
 
 ```
 LosGothsCo Enterprise/        (= repo root)
-├── machina/                  ← Next.js app (Claude works here)
+├── maquina/                  ← Next.js app (Claude works here)
 ├── README.md                 ← product spec
 ├── BUILD_PLAN.md             ← this document
 └── docs/                     ← optional later
@@ -61,7 +61,7 @@ These features are explicitly deferred. Do not scaffold, stub, or reference them
 
 ## MVP Scope
 
-The first working version of Machina is complete when an Admin can:
+The first working version of Maquina is complete when an Admin can:
 
 - Log in via magic link
 - View and manage the DJ roster
@@ -114,10 +114,10 @@ A running Next.js app connected to Supabase with the correct folder structure, e
 
 #### 0.1 — GitHub
 ```bash
-# Create a new GitHub repository named: machina
+# Create a new GitHub repository named: maquina
 # Clone it locally
-git clone https://github.com/YOUR_USERNAME/machina.git
-cd machina
+git clone https://github.com/YOUR_USERNAME/maquina.git
+cd maquina
 ```
 
 #### 0.2 — Next.js
@@ -151,7 +151,7 @@ npm install @hookform/resolvers react-hook-form
 
 #### 0.4 — Supabase Project
 - Create a new Supabase project at https://supabase.com
-- Project name: `machina` (or your preferred name)
+- Project name: `maquina` (or your preferred name)
 - Enable RLS by default on new tables
 - Save the project URL, publishable key, and secret key
 
@@ -1506,6 +1506,6 @@ Write to `audit_log` in every server action that creates, edits, or deletes a re
 
 ---
 
-*Machina — BUILD_PLAN.md*
+*Maquina — BUILD_PLAN.md*
 *LosGothsCo Event Operations Platform*
 *Last updated: April 2026*

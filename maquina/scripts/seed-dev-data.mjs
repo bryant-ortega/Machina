@@ -11,7 +11,7 @@
  * Usage:
  *   node scripts/seed-dev-data.mjs
  *
- * Reads env from machina/.env.local. Requires an existing admin profile
+ * Reads env from maquina/.env.local. Requires an existing admin profile
  * (chase@losgoths.co) — events.created_by is set to that profile's id.
  *
  * Service-role key bypasses RLS, so this script can write anywhere.

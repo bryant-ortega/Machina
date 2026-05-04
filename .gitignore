@@ -11,10 +11,10 @@ node_modules/
 .yarn/
 
 # Next.js
-machina/.next/
-machina/out/
-machina/build/
-machina/dist/
+maquina/.next/
+maquina/out/
+maquina/build/
+maquina/dist/
 
 # Logs
 *.log

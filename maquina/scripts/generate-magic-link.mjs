@@ -10,7 +10,7 @@
  *   node scripts/generate-magic-link.mjs you@example.com /events
  *
  * Reads NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from
- * machina/.env.local. Service-role key bypasses RLS and Auth gating, so
+ * maquina/.env.local. Service-role key bypasses RLS and Auth gating, so
  * NEVER ship this script's output anywhere or commit any link it prints.
  *
  * The printed URL points at Supabase's verify endpoint. Pasting it into a
