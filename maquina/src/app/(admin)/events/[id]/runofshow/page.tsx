@@ -105,26 +105,34 @@ export default async function RunOfShowPage({
           </Link>
         </div>
 
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Run of show
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            {event.title} ·{' '}
-            {new Date(`${event.date}T00:00:00`).toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}{' '}
-            · {event.city}, {event.state}
-          </p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-500">
-            Doors {trim(event.doors_time as string | null)} · End{' '}
-            {trim(event.end_time as string | null)}
-          </p>
-          <p className="font-mono text-xs text-zinc-500 dark:text-zinc-500">
-            {event.event_id}
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Run of show
+            </h1>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {event.title} ·{' '}
+              {new Date(`${event.date}T00:00:00`).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}{' '}
+              · {event.city}, {event.state}
+            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-500">
+              Doors {trim(event.doors_time as string | null)} · End{' '}
+              {trim(event.end_time as string | null)}
+            </p>
+            <p className="font-mono text-xs text-zinc-500 dark:text-zinc-500">
+              {event.event_id}
+            </p>
+          </div>
+          <a
+            href={`/api/pdf?view=runofshow&eventId=${id}`}
+            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Export PDF
+          </a>
         </header>
 
         {(stages ?? []).length === 0 ? (

@@ -90,27 +90,44 @@ export default async function BudgetPage({
   }
 
   // ---------------- Header (shared across all views) ----------------------
+  // Export PDF only applies to the editable views (estimated/final).
+  // Compare exports aren't part of Phase 12 scope.
+  const exportHref =
+    view === 'compare'
+      ? null
+      : `/api/pdf?view=budget&eventId=${id}&budget=${view}`
+
   const headerEl = (
-    <header className="space-y-1">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {view === 'estimated'
-          ? 'Estimated budget'
-          : view === 'final'
-            ? 'Final budget'
-            : 'Compare: estimated vs final'}
-      </h1>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        {event.title} ·{' '}
-        {new Date(`${event.date}T00:00:00`).toLocaleDateString(undefined, {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-        })}{' '}
-        · {event.city}, {event.state}
-      </p>
-      <p className="font-mono text-xs text-zinc-500 dark:text-zinc-500">
-        {event.event_id}
-      </p>
+    <header className="flex items-start justify-between gap-4">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {view === 'estimated'
+            ? 'Estimated budget'
+            : view === 'final'
+              ? 'Final budget'
+              : 'Compare: estimated vs final'}
+        </h1>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          {event.title} ·{' '}
+          {new Date(`${event.date}T00:00:00`).toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })}{' '}
+          · {event.city}, {event.state}
+        </p>
+        <p className="font-mono text-xs text-zinc-500 dark:text-zinc-500">
+          {event.event_id}
+        </p>
+      </div>
+      {exportHref ? (
+        <a
+          href={exportHref}
+          className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+        >
+          Export PDF
+        </a>
+      ) : null}
     </header>
   )
 

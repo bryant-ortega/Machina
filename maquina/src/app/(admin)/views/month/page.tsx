@@ -70,13 +70,23 @@ export default async function MonthViewPage({
   return (
     <div className="flex-1 px-8 py-10">
       <div className="mx-auto max-w-6xl space-y-6">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Month view</h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            {monthName} {year} · {events.length}{' '}
-            {events.length === 1 ? 'event' : 'events'}
-            {confirmedOnly ? ' (confirmed only)' : ''}
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Month view</h1>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {monthName} {year} · {events.length}{' '}
+              {events.length === 1 ? 'event' : 'events'}
+              {confirmedOnly ? ' (confirmed only)' : ''}
+            </p>
+          </div>
+          <a
+            href={`/api/pdf?view=month&year=${year}&month=${month}${
+              confirmedOnly ? '&confirmed_only=1' : ''
+            }`}
+            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Export PDF
+          </a>
         </header>
 
         <ViewToolbar
