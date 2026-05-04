@@ -6,31 +6,36 @@ import { useRouter } from 'next/navigation'
 /**
  * Client-side router for the unauthenticated root URL.
  *
- * Inspects window.location.hash. If we see a Supabase recovery token
- * fragment (`#access_token=xxx&type=recovery&...`), forward that whole
- * fragment to /reset-password — the page there listens for the
- * PASSWORD_RECOVERY auth event and unlocks the form. Otherwise, just
- * send the user to /login.
+ * Recovery emails sometimes land here (instead of /reset-password) when
+ * the redirectTo URL doesn't match Supabase's allow-list and Supabase
+ * falls back to Site URL. The recovery token can arrive in two forms:
  *
- * Why preserve the hash: the supabase-js browser client reads the hash
- * on init to detect the session. If we drop it during the redirect, the
- * recovery flow breaks.
+ *   - Hash fragment:  /#access_token=...&type=recovery&...   (implicit flow)
+ *   - Query string:   /?code=xxx                              (PKCE flow)
+ *
+ * Either way we forward the whole URL tail to /reset-password so the
+ * page there can hand it to the supabase client and unlock the form.
  */
 export function RootRedirect() {
   const router = useRouter()
 
   useEffect(() => {
+    const search = window.location.search || ''
     const hash = window.location.hash || ''
-    const isRecovery =
+
+    const hasRecoveryHash =
       hash.includes('type=recovery') && hash.includes('access_token=')
-    if (isRecovery) {
-      // Use a hard navigation so the hash is preserved on the new URL.
-      window.location.replace(`/reset-password${hash}`)
+    // PKCE-flow recovery emails land with `?code=...`. There's no
+    // `type=recovery` in the query — the only signal is the code itself.
+    const hasRecoveryCode = /[?&]code=/.test(search)
+
+    if (hasRecoveryHash || hasRecoveryCode) {
+      // Hard navigation so the URL tail (search + hash) is preserved.
+      window.location.replace(`/reset-password${search}${hash}`)
       return
     }
     router.replace('/login')
   }, [router])
 
-  // Render nothing — this is purely a redirect shim.
   return null
 }
