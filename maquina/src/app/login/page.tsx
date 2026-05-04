@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { loginUser } from './actions'
 
 /**
@@ -10,12 +12,32 @@ import { loginUser } from './actions'
  * The form posts to a server action so the auth cookies are written on
  * the SSR side and the redirect to /events (or /dj/*) is one round-trip.
  * Forgotten passwords are handled at /forgot-password.
+ *
+ * Recovery hand-off: when Supabase's verify endpoint can't redirect
+ * straight to /reset-password (because the redirectTo URL didn't match
+ * the project's allow-list), it falls back to Site URL and the browser
+ * lands here with a recovery URL fragment. We listen for the
+ * PASSWORD_RECOVERY auth event and bounce to /reset-password so the
+ * fragment never gets stranded on the wrong page.
  */
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  useEffect(() => {
+    const supabase = createClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          router.replace('/reset-password')
+        }
+      }
+    )
+    return () => subscription.unsubscribe()
+  }, [router])
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
