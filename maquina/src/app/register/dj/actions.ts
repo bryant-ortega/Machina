@@ -1,33 +1,36 @@
 'use server'
 
-import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 /**
- * Server-side validation + signInWithOtp for /register/dj.
+ * Server action for /register/dj.
  *
- * Flow:
- *   1. Validate input with zod (matches the DJ table CHECK constraints).
- *   2. Pre-check the djs table for an existing row with this email. If found,
- *      return `already_registered` so the client can show a friendly message.
- *      We use the service-role client because RLS would block an anonymous
- *      reader; we only return a boolean, not row data.
- *   3. Call signInWithOtp with `data` (user_metadata) carrying every form
- *      field. On the magic-link callback we drain those fields into the
- *      djs table — no row is committed until the user proves email
- *      ownership by clicking the link.
- *
- * Why server-side instead of letting the client call signInWithOtp directly:
- *   - The duplicate-email check needs the service role.
- *   - Keeps the redirect URL derivation in one place.
- *   - Validates with zod once, on the trusted side.
+ * Flow (Phase Auth — email + password):
+ *   1. Validate input (matches DJ table CHECK constraints).
+ *   2. Refuse if a djs row already exists for this email — friendly
+ *      message + link to /login.
+ *   3. Create the auth user via the admin client with email_confirm:true,
+ *      password set, and `role: 'dj'` in user_metadata so the
+ *      handle_new_user trigger marks the profile as a DJ.
+ *   4. Insert the djs row directly via the admin client. We're past the
+ *      magic-link callback dance — once the password is on file, the
+ *      account is real.
+ *   5. Sign the new user in via the SSR client (sets auth cookies on
+ *      this response), then redirect to /dj/upload-w9 so they can finish
+ *      onboarding. No email round-trip.
  */
 
 const RegisterDjInput = z.object({
   dj_name: z.string().trim().min(1, 'DJ name is required').max(100),
   government_name: z.string().trim().min(1, 'Legal name is required').max(200),
   email: z.string().trim().toLowerCase().email('Invalid email'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be 128 characters or fewer'),
   phone: z
     .string()
     .trim()
@@ -35,8 +38,6 @@ const RegisterDjInput = z.object({
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   region: z.enum(['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other']),
-  // Empty <select> values come through as ''. Coerce to undefined first,
-  // then narrow to the enum so the output type is clean.
   pay_method: z.preprocess(
     (v) => (v === '' ? undefined : v),
     z.enum(['zelle', 'venmo', 'paypal']).optional()
@@ -50,16 +51,19 @@ const RegisterDjInput = z.object({
 })
 
 export type RegisterDjResult =
-  | { ok: true }
   | { ok: false; reason: 'invalid'; fieldErrors: Record<string, string[]> }
   | { ok: false; reason: 'already_registered' }
-  | { ok: false; reason: 'send_failed'; message: string }
+  | { ok: false; reason: 'create_failed'; message: string }
+// On success the action redirects, so the form never sees an `ok: true`.
 
-export async function registerDj(formData: FormData): Promise<RegisterDjResult> {
+export async function registerDj(
+  formData: FormData
+): Promise<RegisterDjResult | never> {
   const raw = {
     dj_name: formData.get('dj_name'),
     government_name: formData.get('government_name'),
     email: formData.get('email'),
+    password: formData.get('password'),
     phone: formData.get('phone'),
     region: formData.get('region'),
     pay_method: formData.get('pay_method'),
@@ -76,7 +80,6 @@ export async function registerDj(formData: FormData): Promise<RegisterDjResult> 
   }
 
   const input = parsed.data
-  const pay_method = input.pay_method ?? undefined
 
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -84,50 +87,78 @@ export async function registerDj(formData: FormData): Promise<RegisterDjResult> 
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // Duplicate-DJ check. We deliberately don't reveal whether the email exists
-  // as an admin/non-DJ — that would leak admin emails. Only an existing DJ row
-  // gets the "already registered" message.
+  // Refuse duplicate DJ registration. We don't reveal whether a non-DJ
+  // (admin/partner) exists with this email — that would leak the admin
+  // roster.
   const { data: existing } = await admin
     .from('djs')
     .select('id')
     .eq('email', input.email)
     .maybeSingle()
-
   if (existing) {
     return { ok: false, reason: 'already_registered' }
   }
 
-  // Build the redirect URL from the request host so it works in dev and prod
-  // without hard-coding NEXT_PUBLIC_SITE_URL.
-  const h = await headers()
-  const proto = h.get('x-forwarded-proto') ?? 'http'
-  const host = h.get('host') ?? 'localhost:3000'
-  const origin = `${proto}://${host}`
-
-  // signInWithOtp with `data` stores fields in raw_user_meta_data on the new
-  // auth.users row. Our handle_new_user trigger reads `role` to set the
-  // profile correctly; the auth callback reads the rest to insert the djs
-  // row after the link is clicked.
-  const { error } = await admin.auth.signInWithOtp({
-    email: input.email,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback`,
-      data: {
+  // Create the auth user. email_confirm:true skips the verification email —
+  // we trust the registration form because the immediately-following
+  // password proves intent. (Email verification could be added later as a
+  // soft "please confirm" UX, but it's not a hard auth requirement.)
+  const { data: created, error: createErr } =
+    await admin.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: {
         role: 'dj',
         display_name: input.dj_name,
-        dj_name: input.dj_name,
-        government_name: input.government_name,
-        phone: input.phone ?? null,
-        region: input.region,
-        pay_method: pay_method ?? null,
-        pay_handle: input.pay_handle ?? null,
       },
-    },
-  })
-
-  if (error) {
-    return { ok: false, reason: 'send_failed', message: error.message }
+    })
+  if (createErr || !created.user) {
+    return {
+      ok: false,
+      reason: 'create_failed',
+      message:
+        createErr?.message ??
+        'Could not create account. Try a different email.',
+    }
   }
 
-  return { ok: true }
+  // Insert the djs row. handle_new_user already wrote the profile row;
+  // this writes the DJ-specific columns. RLS doesn't apply to the admin
+  // client, so we don't need a policy here.
+  const { error: djErr } = await admin.from('djs').insert({
+    user_id: created.user.id,
+    dj_name: input.dj_name,
+    government_name: input.government_name,
+    email: input.email,
+    phone: input.phone ?? null,
+    pay_method: input.pay_method ?? null,
+    pay_handle: input.pay_handle ?? null,
+    region: input.region,
+  })
+  if (djErr) {
+    // Best-effort cleanup of the half-created auth user so the same email
+    // can be retried. Ignore the cleanup error — surfacing the original
+    // failure is more useful.
+    await admin.auth.admin.deleteUser(created.user.id)
+    return {
+      ok: false,
+      reason: 'create_failed',
+      message: djErr.message,
+    }
+  }
+
+  // Sign in via the SSR client so the response sets the session cookies.
+  const supabase = await createServerSupabaseClient()
+  const { error: signInErr } = await supabase.auth.signInWithPassword({
+    email: input.email,
+    password: input.password,
+  })
+  if (signInErr) {
+    // Account is created — fall back to the login page rather than
+    // surfacing this as a failure.
+    redirect('/login')
+  }
+
+  redirect('/dj/upload-w9')
 }

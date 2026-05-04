@@ -10,15 +10,20 @@ import { registerDj, type RegisterDjResult } from './actions'
  * DJ self-registration form. Mirrors the server-side zod schema in actions.ts
  * so the client gets immediate validation feedback before submitting.
  *
- * After a successful submit, the success state shows the magic-link
- * confirmation. If the email is already in the djs table, we show a friendly
- * "already registered" message with a link to /login.
+ * On success the server action redirects to /dj/upload-w9 — no magic-link
+ * round-trip; the password establishes account ownership immediately.
+ * If the email is already on a DJ record, we show a friendly "already
+ * registered" message with a link to /login.
  */
 
 const FormSchema = z.object({
   dj_name: z.string().trim().min(1, 'DJ name is required').max(100),
   government_name: z.string().trim().min(1, 'Legal name is required').max(200),
   email: z.string().trim().email('Enter a valid email'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be 128 characters or fewer'),
   phone: z.string().trim().max(40).optional(),
   region: z.enum(['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other']),
   pay_method: z.enum(['', 'zelle', 'venmo', 'paypal']).optional(),
@@ -29,7 +34,6 @@ type FormValues = z.infer<typeof FormSchema>
 
 type ViewState =
   | { kind: 'idle' }
-  | { kind: 'sent'; email: string }
   | { kind: 'already_registered' }
   | { kind: 'error'; message: string }
 
@@ -62,11 +66,10 @@ export function RegistrationForm() {
     }
 
     startTransition(async () => {
-      const result: RegisterDjResult = await registerDj(fd)
-      if (result.ok) {
-        setView({ kind: 'sent', email: values.email })
-        return
-      }
+      // On success the server action redirects (never returns). Anything
+      // we get back here is an error.
+      const result = (await registerDj(fd)) as RegisterDjResult | undefined
+      if (!result) return
       if (result.reason === 'already_registered') {
         setView({ kind: 'already_registered' })
         return
@@ -82,15 +85,6 @@ export function RegistrationForm() {
       }
       setView({ kind: 'error', message: result.message })
     })
-  }
-
-  if (view.kind === 'sent') {
-    return (
-      <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-        Thanks — check <strong>{view.email}</strong> for a magic link to
-        finish setting up your DJ profile. You can close this tab.
-      </div>
-    )
   }
 
   if (view.kind === 'already_registered') {
@@ -146,6 +140,20 @@ export function RegistrationForm() {
           inputMode="email"
           autoComplete="email"
           {...register('email')}
+          className={inputClass}
+          disabled={pending}
+        />
+      </Field>
+
+      <Field
+        label="Password"
+        hint="At least 8 characters. You'll use this to sign in."
+        error={errors.password?.message}
+      >
+        <input
+          type="password"
+          autoComplete="new-password"
+          {...register('password')}
           className={inputClass}
           disabled={pending}
         />
@@ -211,12 +219,12 @@ export function RegistrationForm() {
         disabled={pending}
         className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
       >
-        {pending ? 'Sending…' : 'Send magic link'}
+        {pending ? 'Creating account…' : 'Create account'}
       </button>
 
       <p className="text-xs text-zinc-500 dark:text-zinc-500">
-        We&apos;ll email you a one-time sign-in link to confirm your account.
-        No password needed.
+        Your account is created instantly. Next, we&apos;ll ask you to upload
+        your W-9 so we can pay you.
       </p>
     </form>
   )
