@@ -54,22 +54,47 @@ export default function ResetPasswordPage() {
     })
 
     ;(async () => {
+      // Two formats Supabase recovery emails can use:
+      //   1. PKCE (newer):     ?code=xxx                 in the query string
+      //   2. Implicit (older): #access_token=...&refresh_token=...&type=recovery
+      // @supabase/ssr's browser client does NOT auto-detect either by
+      // default, so we explicitly handle both here.
       const params = new URLSearchParams(window.location.search)
       const code = params.get('code')
-      if (!code) {
-        log('no ?code= in URL')
+      if (code) {
+        log(`found ?code=, calling exchangeCodeForSession`)
+        const { error: exchErr } =
+          await supabase.auth.exchangeCodeForSession(code)
+        if (exchErr) {
+          log(`exchange error: ${exchErr.message}`)
+        } else {
+          log('exchange succeeded')
+        }
         return
       }
-      log(`found ?code=, calling exchangeCodeForSession`)
-      const { data, error: exchErr } =
-        await supabase.auth.exchangeCodeForSession(code)
-      if (exchErr) {
-        log(`exchange error: ${exchErr.message}`)
-      } else if (data.session) {
-        log('exchange succeeded — session present')
-      } else {
-        log('exchange returned no session')
+
+      // Parse the hash for an implicit-flow recovery payload.
+      const rawHash = window.location.hash.startsWith('#')
+        ? window.location.hash.slice(1)
+        : window.location.hash
+      const hashParams = new URLSearchParams(rawHash)
+      const access_token = hashParams.get('access_token')
+      const refresh_token = hashParams.get('refresh_token')
+      if (access_token && refresh_token) {
+        log('found #access_token, calling setSession')
+        const { error: setErr } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        })
+        if (setErr) {
+          log(`setSession error: ${setErr.message}`)
+        } else {
+          log('setSession succeeded')
+        }
+        return
       }
+
+      log('no recovery token found in URL')
     })()
 
     const checks = [200, 500, 1500, 3500].map((ms) =>
