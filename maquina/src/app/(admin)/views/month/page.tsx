@@ -68,9 +68,9 @@ export default async function MonthViewPage({
   const yearRange = buildYearRange(year)
 
   return (
-    <div className="flex-1 px-8 py-10">
+    <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">Month view</h1>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -97,7 +97,47 @@ export default async function MonthViewPage({
           yearRange={yearRange}
         />
 
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+        {/* Mobile: card list. Desktop: full table below. */}
+        {events.length === 0 ? (
+          <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-6 text-sm text-zinc-600 md:hidden dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
+            No events in {monthName} {year}.
+          </div>
+        ) : (
+          <ul className="space-y-2 md:hidden">
+            {events.map((e) => (
+              <li
+                key={`m-${e.id}`}
+                className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+              >
+                <Link
+                  href={`/events/${e.id}/edit`}
+                  className="flex flex-col gap-1.5 px-4 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-zinc-900 dark:text-zinc-100">
+                        {e.title || '—'}
+                      </p>
+                      <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                        {e.venueName ?? '—'} · {e.city}, {e.state}
+                      </p>
+                    </div>
+                    <StatusBadge status={e.status} />
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {e.day_of_week} ·{' '}
+                    {new Date(`${e.date}T00:00:00`).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="hidden overflow-hidden rounded-xl border border-zinc-200 bg-white md:block dark:border-zinc-800 dark:bg-zinc-950">
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
               <tr>

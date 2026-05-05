@@ -135,7 +135,7 @@ export default async function EditEventPage({
     t ? t.split(':').slice(0, 2).join(':') : ''
 
   return (
-    <div className="flex-1 px-8 py-10">
+    <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-5xl space-y-8">
         <div>
           <Link
@@ -146,7 +146,7 @@ export default async function EditEventPage({
           </Link>
         </div>
 
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">
               Edit event

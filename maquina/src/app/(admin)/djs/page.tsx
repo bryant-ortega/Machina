@@ -51,7 +51,7 @@ export default async function DjRosterPage({
 
   if (error) {
     return (
-      <div className="flex-1 px-8 py-10">
+      <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
         <div className="mx-auto max-w-5xl">
           <h1 className="text-2xl font-semibold tracking-tight">DJs</h1>
           <p className="mt-3 text-sm text-red-600 dark:text-red-400">
@@ -78,7 +78,7 @@ export default async function DjRosterPage({
   )
 
   return (
-    <div className="flex-1 px-8 py-10">
+    <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="flex items-end justify-between gap-4">
           <div className="space-y-1">
@@ -121,7 +121,7 @@ export default async function DjRosterPage({
           ))}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
               <tr>

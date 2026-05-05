@@ -28,7 +28,7 @@ export default async function NewEventPage() {
   ])
 
   return (
-    <div className="flex-1 px-8 py-10">
+    <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-5xl space-y-8">
         <div>
           <Link

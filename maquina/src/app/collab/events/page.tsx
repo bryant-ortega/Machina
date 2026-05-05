@@ -46,7 +46,7 @@ export default async function CollabEventsPage() {
   }))
 
   return (
-    <div className="flex-1 px-6 py-10">
+    <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Your events</h1>
@@ -57,8 +57,52 @@ export default async function CollabEventsPage() {
           </p>
         </header>
 
+        {/* Mobile: card list. Desktop: full table below. */}
         {events.length > 0 && (
-          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          <ul className="space-y-2 md:hidden">
+            {events.map((e) => (
+              <li
+                key={`m-${e.id}`}
+                className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+              >
+                <Link
+                  href={`/collab/events/${e.id}`}
+                  className="flex flex-col gap-1.5 px-4 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 flex-1 truncate font-medium text-zinc-900 dark:text-zinc-100">
+                      {e.title || '—'}
+                    </p>
+                    <span
+                      className={
+                        e.status === 'confirmed'
+                          ? 'shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
+                          : 'shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                      }
+                    >
+                      {e.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {new Date(`${e.date}T00:00:00`).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                    {' · '}
+                    {e.venueName ?? '—'}
+                    {' · '}
+                    {e.city}
+                    {e.state ? `, ${e.state}` : ''}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {events.length > 0 && (
+          <div className="hidden overflow-hidden rounded-xl border border-zinc-200 bg-white md:block dark:border-zinc-800 dark:bg-zinc-950">
             <table className="w-full text-sm">
               <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
                 <tr>

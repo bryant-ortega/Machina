@@ -141,7 +141,7 @@ export default async function CollabEventDetailPage({
     : (event.venues as { name: string } | null)?.name
 
   return (
-    <div className="flex-1 px-6 py-10">
+    <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-5xl space-y-8">
         <div>
           <Link
@@ -152,7 +152,7 @@ export default async function CollabEventDetailPage({
           </Link>
         </div>
 
-        <header className="flex items-start justify-between gap-4">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">
               {event.title}
@@ -167,7 +167,7 @@ export default async function CollabEventDetailPage({
               · {venueName ?? '—'} · {event.city}, {event.state}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <a
               href={`/api/pdf?view=runofshow&eventId=${id}`}
               className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
