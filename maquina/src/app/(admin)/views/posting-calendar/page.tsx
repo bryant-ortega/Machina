@@ -82,6 +82,8 @@ export default async function PostingCalendarPage({
     eventTitle: string
     eventStatus: string
     eventDate: string
+    eventCity: string
+    eventState: string
     actionDate: string
     actionType: 'announce' | 'begin_art' | 'art_due' | 'on_sale'
     label: string
@@ -111,6 +113,8 @@ export default async function PostingCalendarPage({
         eventTitle: e.title,
         eventStatus: e.status,
         eventDate: e.date,
+        eventCity: e.city,
+        eventState: e.state,
         actionDate: f.date,
         actionType: f.type,
         label: ACTION_LABELS[f.type],
@@ -193,7 +197,9 @@ export default async function PostingCalendarPage({
                               day: 'numeric',
                               year: 'numeric',
                             }
-                          )}
+                          )}{' '}
+                          · {a.eventCity}
+                          {a.eventState ? `, ${a.eventState}` : ''}
                         </p>
                       </div>
                       <ActionBadge type={a.actionType} label={a.label} />
