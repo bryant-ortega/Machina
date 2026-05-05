@@ -57,7 +57,7 @@ export default async function RunOfShowPage({
     supabase
       .from('event_dj_slots')
       .select(
-        'id, stage_id, slot_order, slot_type, djs(dj_name)'
+        'id, stage_id, slot_order, slot_type, start_time, djs(dj_name)'
       )
       .eq('event_id', id)
       .order('stage_id', { ascending: true })
@@ -79,6 +79,7 @@ export default async function RunOfShowPage({
     list.push({
       slot_type: raw.slot_type as SlotType,
       dj_name: (dj?.dj_name as string) ?? 'TBA',
+      start_time: (raw.start_time as string | null) ?? null,
     })
     slotsByStage.set(stageId, list)
   }

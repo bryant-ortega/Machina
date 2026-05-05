@@ -65,6 +65,14 @@ export function formatHHMM12(minutes: number): string {
 export type RunOfShowSlot = {
   slot_type: SlotType
   dj_name: string
+  /**
+   * Optional per-slot custom start time (Phase 14). When set, this
+   * overrides the doors + slot-type offset that buildSchedule would
+   * otherwise compute. Useful when an event needs a non-standard
+   * cadence (e.g. headliner pushed back, late support set). Same
+   * format as event.doors_time — 'HH:MM' or 'HH:MM:SS'.
+   */
+  start_time?: string | null
 }
 
 export type RunOfShowEvent = {
@@ -204,6 +212,24 @@ export function buildSchedule(
 
   // --- DJ rows -----------------------------------------------------------
   for (const slot of slots) {
+    // Phase 14: honor a per-slot start_time override before falling back
+    // to the doors+offset calculation. When set, the slot is anchored to
+    // the override time directly — no end-time gating needed because the
+    // admin chose this time explicitly.
+    if (slot.start_time) {
+      const customMin = parseHHMM(slot.start_time)
+      // If the override falls before doors and the event wraps past
+      // midnight, normalize forward by 1440 so it sorts after doors.
+      const minutes =
+        end > 1440 && customMin < doors ? customMin + 1440 : customMin
+      rows.push({
+        minutes,
+        time: formatHHMM12(minutes),
+        label: slot.dj_name,
+        kind: 'dj',
+      })
+      continue
+    }
     const offset = SLOT_OFFSETS[slot.slot_type]
     if (!offset) continue
     // Skip end-anchored DJ rows when there's no usable end time —

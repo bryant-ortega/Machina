@@ -83,6 +83,10 @@ export type BudgetInputs = {
   split_pct: number
   /** Whether bar revenue applies. From events.bar_included. */
   bar_included: boolean
+  /** Per-paid-attendee bar gross. Defaults to BAR_PER_HEAD when undefined. */
+  bar_per_head?: number
+  /** LosGothsCo's cut of bar gross (0..1). Defaults to LOSGOTHSCO_BAR_PCT. */
+  bar_pct?: number
   /** Per-event merch knobs (currently editable in the budget UI). */
   merch_gross: number
   merch_pct_after_fees: number
@@ -143,8 +147,12 @@ export function computeBudget(input: BudgetInputs): BudgetSummary {
   )
   const losgothsco_tix_net = gross_tix_total * (split_pct / 100)
 
-  const bar_gross = input.bar_included ? paid_attendance * BAR_PER_HEAD : 0
-  const losgothsco_bar = bar_gross * LOSGOTHSCO_BAR_PCT
+  const barPerHead = clampNonNeg(
+    input.bar_per_head ?? BAR_PER_HEAD
+  )
+  const barPct = clamp(input.bar_pct ?? LOSGOTHSCO_BAR_PCT, 0, 1)
+  const bar_gross = input.bar_included ? paid_attendance * barPerHead : 0
+  const losgothsco_bar = bar_gross * barPct
 
   const merch_gross = clampNonNeg(input.merch_gross)
   const merchAfterFees = clamp(input.merch_pct_after_fees, 0, 1)

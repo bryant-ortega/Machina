@@ -59,7 +59,7 @@ export default async function CollabEventDetailPage({
       .order('stage_number', { ascending: true }),
     supabase
       .from('event_dj_slots')
-      .select('id, stage_id, slot_order, slot_type, djs(dj_name)')
+      .select('id, stage_id, slot_order, slot_type, start_time, djs(dj_name)')
       .eq('event_id', id)
       .order('stage_id', { ascending: true })
       .order('slot_order', { ascending: true }),
@@ -71,7 +71,7 @@ export default async function CollabEventDetailPage({
   const { data: estBudget } = await supabase
     .from('event_budgets')
     .select(
-      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee'
+      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee, bar_per_head, bar_pct'
     )
     .eq('event_id', id)
     .eq('budget_type', 'estimated')
@@ -105,6 +105,8 @@ export default async function CollabEventDetailPage({
       merch_pct_after_fees: Number(estBudget.merch_pct_after_fees ?? 0),
       merch_cogs_pct: Number(estBudget.merch_cogs_pct ?? 0),
       merch_seller_fee: Number(estBudget.merch_seller_fee ?? 0),
+      bar_per_head: Number(estBudget.bar_per_head ?? 24),
+      bar_pct: Number(estBudget.bar_pct ?? 0.16),
       expenses: (rawExpenses ?? []).map((e) => ({
         qty: Number(e.qty ?? 0),
         price: Number(e.price ?? 0),
@@ -123,6 +125,7 @@ export default async function CollabEventDetailPage({
     list.push({
       slot_type: raw.slot_type as SlotType,
       dj_name: (dj?.dj_name as string) ?? 'TBA',
+      start_time: (raw.start_time as string | null) ?? null,
     })
     slotsByStage.set(stageId, list)
   }

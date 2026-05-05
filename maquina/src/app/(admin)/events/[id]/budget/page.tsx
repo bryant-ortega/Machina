@@ -51,7 +51,7 @@ export default async function BudgetPage({
   const { data: estimated } = await supabase
     .from('event_budgets')
     .select(
-      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee'
+      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee, bar_per_head, bar_pct'
     )
     .eq('event_id', id)
     .eq('budget_type', 'estimated')
@@ -63,7 +63,7 @@ export default async function BudgetPage({
   const { data: finalBudget } = await supabase
     .from('event_budgets')
     .select(
-      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee'
+      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee, bar_per_head, bar_pct'
     )
     .eq('event_id', id)
     .eq('budget_type', 'final')
@@ -192,6 +192,8 @@ export default async function BudgetPage({
               merch_pct_after_fees: Number(estimated.merch_pct_after_fees ?? 0.97),
               merch_cogs_pct: Number(estimated.merch_cogs_pct ?? 0.35),
               merch_seller_fee: Number(estimated.merch_seller_fee ?? 120),
+              bar_per_head: Number(estimated.bar_per_head ?? 24),
+              bar_pct: Number(estimated.bar_pct ?? 0.16),
             }}
             final={{
               drop_off: Number(finalBudget.drop_off ?? 0),
@@ -203,6 +205,8 @@ export default async function BudgetPage({
               merch_pct_after_fees: Number(finalBudget.merch_pct_after_fees ?? 0.97),
               merch_cogs_pct: Number(finalBudget.merch_cogs_pct ?? 0.35),
               merch_seller_fee: Number(finalBudget.merch_seller_fee ?? 120),
+              bar_per_head: Number(finalBudget.bar_per_head ?? 24),
+              bar_pct: Number(finalBudget.bar_pct ?? 0.16),
             }}
             estimatedExpenses={(estExpenses ?? []).map((e) => ({
               category: e.category as string,
@@ -283,6 +287,8 @@ export default async function BudgetPage({
             merch_pct_after_fees: Number(activeBudget.merch_pct_after_fees ?? 0.97),
             merch_cogs_pct: Number(activeBudget.merch_cogs_pct ?? 0.35),
             merch_seller_fee: Number(activeBudget.merch_seller_fee ?? 120),
+            bar_per_head: Number(activeBudget.bar_per_head ?? 24),
+            bar_pct: Number(activeBudget.bar_pct ?? 0.16),
           }}
           initialExpenses={(expenses ?? []).map((e) => ({
             id: e.id as string,

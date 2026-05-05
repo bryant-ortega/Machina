@@ -87,6 +87,8 @@ export type BudgetFormProps = {
     merch_pct_after_fees: number
     merch_cogs_pct: number
     merch_seller_fee: number
+    bar_per_head: number
+    bar_pct: number
   }
   initialExpenses: Array<{
     id: string
@@ -164,6 +166,14 @@ export function BudgetForm({
   const [merchSellerFee, setMerchSellerFee] = useState<string>(
     String(budget.merch_seller_fee)
   )
+  // Per-event bar tunables (Phase 14). Stored as $/head and 0..1 ratio
+  // in the DB; surfaced as $ and 0..100 in the UI for clarity.
+  const [barPerHead, setBarPerHead] = useState<string>(
+    String(budget.bar_per_head)
+  )
+  const [barPct, setBarPct] = useState<string>(
+    String(budget.bar_pct * 100)
+  )
 
   // ---------------------------------------------------------------- Derived
 
@@ -186,6 +196,8 @@ export function BudgetForm({
         merch_pct_after_fees: Number(merchPctAfterFees) / 100,
         merch_cogs_pct: Number(merchCogsPct) / 100,
         merch_seller_fee: Number(merchSellerFee),
+        bar_per_head: Number(barPerHead),
+        bar_pct: Number(barPct) / 100,
         expenses: expenses.map((e) => ({
           qty: Number(e.qty),
           price: Number(e.price),
@@ -202,6 +214,8 @@ export function BudgetForm({
       merchPctAfterFees,
       merchCogsPct,
       merchSellerFee,
+      barPerHead,
+      barPct,
       expenses,
       event.split_pct,
       event.bar_included,
@@ -302,6 +316,8 @@ export function BudgetForm({
       merch_pct_after_fees: (Number(merchPctAfterFees) || 0) / 100,
       merch_cogs_pct: (Number(merchCogsPct) || 0) / 100,
       merch_seller_fee: Number(merchSellerFee) || 0,
+      bar_per_head: Number(barPerHead) || 0,
+      bar_pct: (Number(barPct) || 0) / 100,
       expenses: expenses.map((ex) => ({
         id: ex.id || '',
         category: ex.category,
@@ -725,10 +741,9 @@ export function BudgetForm({
             Income inputs
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Drives the income summary above. Bar knobs (${BAR_PER_HEAD}/head,{' '}
-            LosGothsCo bar {Math.round(LOSGOTHSCO_BAR_PCT * 100)}%) are
-            org-wide defaults — Phase 14 will let you override them per
-            event.
+            Drives the income summary above. Bar knobs default to $
+            {BAR_PER_HEAD}/head and {Math.round(LOSGOTHSCO_BAR_PCT * 100)}%
+            but can be overridden per event below.
           </p>
         </header>
 
@@ -767,6 +782,21 @@ export function BudgetForm({
             value={vendorIncome}
             onChange={setVendorIncome}
             error={fieldErrors.vendor_income}
+          />
+          <NumberField
+            label="Bar $ per head"
+            help="Per-paid-attendee bar gross. Org default: $24."
+            value={barPerHead}
+            onChange={setBarPerHead}
+            error={fieldErrors.bar_per_head}
+          />
+          <NumberField
+            label="LosGothsCo bar %"
+            help="LosGothsCo's cut of bar gross. Org default: 16%."
+            value={barPct}
+            onChange={setBarPct}
+            error={fieldErrors.bar_pct}
+            max={100}
           />
         </div>
       </section>

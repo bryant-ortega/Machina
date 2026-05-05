@@ -350,8 +350,11 @@ export function EditEventForm({
         slot_type: 'open',
         dj_id: '',
         rate: String(SLOT_DEFAULT_RATES['open']),
-        start_time: doorsTime || '21:00',
-        end_time: addMinutes(doorsTime || '21:00', 60),
+        // Phase 14: empty start/end means "use the doors+offset auto
+        // calculation in run-of-show". Admins fill these in only to
+        // override the default cadence for a specific slot.
+        start_time: '',
+        end_time: '',
       },
     ])
   }
@@ -867,7 +870,9 @@ export function EditEventForm({
                 </div>
 
                 <div className="w-28 shrink-0">
-                  <label className={miniLabel}>Start</label>
+                  <label className={miniLabel} title="Leave blank for auto from doors + slot offset">
+                    Start (auto)
+                  </label>
                   <input
                     type="time"
                     value={slot.start_time}
@@ -880,7 +885,9 @@ export function EditEventForm({
                 </div>
 
                 <div className="w-28 shrink-0">
-                  <label className={miniLabel}>End</label>
+                  <label className={miniLabel} title="Leave blank for auto">
+                    End (auto)
+                  </label>
                   <input
                     type="time"
                     value={slot.end_time}

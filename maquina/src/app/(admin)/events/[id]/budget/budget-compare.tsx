@@ -47,6 +47,8 @@ type BudgetScalars = {
   merch_pct_after_fees: number
   merch_cogs_pct: number
   merch_seller_fee: number
+  bar_per_head: number
+  bar_pct: number
 }
 
 type ExpenseRow = {
@@ -101,6 +103,8 @@ export function BudgetCompare({
     merch_pct_after_fees: estimated.merch_pct_after_fees,
     merch_cogs_pct: estimated.merch_cogs_pct,
     merch_seller_fee: estimated.merch_seller_fee,
+    bar_per_head: estimated.bar_per_head,
+    bar_pct: estimated.bar_pct,
     expenses: estimatedExpenses,
   })
 
@@ -117,6 +121,8 @@ export function BudgetCompare({
     merch_pct_after_fees: final.merch_pct_after_fees,
     merch_cogs_pct: final.merch_cogs_pct,
     merch_seller_fee: final.merch_seller_fee,
+    bar_per_head: final.bar_per_head,
+    bar_pct: final.bar_pct,
     expenses: finalExpenses,
   })
 

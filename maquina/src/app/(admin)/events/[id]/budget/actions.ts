@@ -95,6 +95,9 @@ const UpdateBudgetInput = z.object({
   merch_pct_after_fees: Pct0to1,
   merch_cogs_pct: Pct0to1,
   merch_seller_fee: NonNegNumber,
+  // Phase 14: per-event bar tunables.
+  bar_per_head: NonNegNumber,
+  bar_pct: Pct0to1,
   expenses: z.array(ExpenseInput).max(200),
   tiers: z.array(TierInput).max(8),
 })
@@ -208,6 +211,8 @@ export async function updateBudget(
       merch_pct_after_fees: data.merch_pct_after_fees,
       merch_cogs_pct: data.merch_cogs_pct,
       merch_seller_fee: data.merch_seller_fee,
+      bar_per_head: data.bar_per_head,
+      bar_pct: data.bar_pct,
       updated_at: new Date().toISOString(),
     })
     .eq('id', data.budget_id)
@@ -412,7 +417,7 @@ export async function actualizeEvent(
   const { data: estBudget, error: ebErr } = await admin
     .from('event_budgets')
     .select(
-      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee'
+      'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee, bar_per_head, bar_pct'
     )
     .eq('event_id', event_id)
     .eq('budget_type', 'estimated')
@@ -463,6 +468,8 @@ export async function actualizeEvent(
       merch_pct_after_fees: estBudget.merch_pct_after_fees,
       merch_cogs_pct: estBudget.merch_cogs_pct,
       merch_seller_fee: estBudget.merch_seller_fee,
+      bar_per_head: estBudget.bar_per_head,
+      bar_pct: estBudget.bar_pct,
     })
     .select('id')
     .single()

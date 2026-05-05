@@ -111,7 +111,7 @@ async function handleRunOfShow(
       .order('stage_number', { ascending: true }),
     supabase
       .from('event_dj_slots')
-      .select('id, stage_id, slot_order, slot_type, djs(dj_name)')
+      .select('id, stage_id, slot_order, slot_type, start_time, djs(dj_name)')
       .eq('event_id', eventId)
       .order('stage_id', { ascending: true })
       .order('slot_order', { ascending: true }),
@@ -132,6 +132,7 @@ async function handleRunOfShow(
     list.push({
       slot_type: raw.slot_type as SlotType,
       dj_name: (dj?.dj_name as string) ?? 'TBA',
+      start_time: (raw.start_time as string | null) ?? null,
     })
     slotsByStage.set(stageId, list)
   }
@@ -221,7 +222,7 @@ async function handleBudget(
     supabase
       .from('event_budgets')
       .select(
-        'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee'
+        'id, drop_off, guests, deductions, sponsor_income, vendor_income, merch_gross, merch_pct_after_fees, merch_cogs_pct, merch_seller_fee, bar_per_head, bar_pct'
       )
       .eq('event_id', eventId)
       .eq('budget_type', type)
@@ -277,6 +278,8 @@ async function handleBudget(
     merch_pct_after_fees: Number(budget.merch_pct_after_fees ?? 0),
     merch_cogs_pct: Number(budget.merch_cogs_pct ?? 0),
     merch_seller_fee: Number(budget.merch_seller_fee ?? 0),
+    bar_per_head: Number(budget.bar_per_head ?? 24),
+    bar_pct: Number(budget.bar_pct ?? 0.16),
     expenses,
   })
 
