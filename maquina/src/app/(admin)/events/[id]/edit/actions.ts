@@ -563,3 +563,218 @@ export async function updateEvent(
 
   return { ok: true, eventId: data.id, eventCode: newEventCode }
 }
+
+// ---------------------------------------------------------------------------
+// Collaborator actions — Phase 13
+// ---------------------------------------------------------------------------
+
+const AddCollabInput = z.object({
+  event_id: z.string().uuid(),
+  email: z.string().trim().toLowerCase().email('Invalid email'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be 128 characters or fewer')
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+})
+
+export type AddCollabResult =
+  | { ok: true; isNewUser: boolean }
+  | { ok: false; reason: 'invalid'; message: string }
+  | { ok: false; reason: 'unauthorized' }
+  | { ok: false; reason: 'create_failed'; message: string }
+  | { ok: false; reason: 'attach_failed'; message: string }
+
+/**
+ * Attach a collaborator to an event.
+ *
+ * Three cases:
+ *   a) Email already belongs to an auth user with role=collab → just
+ *      insert event_collaborators row.
+ *   b) Email belongs to an auth user with a different role (admin/dj) →
+ *      reject. We don't want to silently demote someone, and we don't
+ *      want to give a DJ collab access via this route.
+ *   c) Email is new → create auth user with provided password (required
+ *      for new users), flip profile.role to 'collab', attach.
+ *
+ * Idempotent on duplicate attaches: the UNIQUE constraint catches them
+ * and we return ok with isNewUser=false.
+ */
+export async function addEventCollaborator(
+  raw: unknown
+): Promise<AddCollabResult> {
+  const supabase = await createServerSupabaseClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, reason: 'unauthorized' }
+  const { data: actor } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!actor || actor.role !== 'admin') {
+    return { ok: false, reason: 'unauthorized' }
+  }
+
+  const parsed = AddCollabInput.safeParse(raw)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      message:
+        parsed.error.issues[0]?.message ?? 'Please check the form fields.',
+    }
+  }
+  const input = parsed.data
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  // Look up an existing auth user by email. There's no direct admin API
+  // for "get user by email", so we list users (small page) and filter.
+  // For a few-thousand-user system this is fine; revisit if it grows.
+  const { data: list, error: listErr } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 200,
+  })
+  if (listErr) {
+    return { ok: false, reason: 'create_failed', message: listErr.message }
+  }
+  const existingAuth = list.users.find((u) => u.email === input.email)
+
+  let targetUserId: string
+  let isNewUser = false
+
+  if (existingAuth) {
+    // Confirm role is collab. If admin/dj, refuse.
+    const { data: existingProfile } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('user_id', existingAuth.id)
+      .maybeSingle()
+    const role = existingProfile?.role
+    if (role && role !== 'collab') {
+      return {
+        ok: false,
+        reason: 'create_failed',
+        message: `Email is already in use by a ${role} account. Use a different email for this collaborator.`,
+      }
+    }
+    targetUserId = existingAuth.id
+  } else {
+    // New user. Need a password.
+    if (!input.password) {
+      return {
+        ok: false,
+        reason: 'invalid',
+        message:
+          'Set an initial password for this collaborator (8+ characters).',
+      }
+    }
+    const { data: created, error: createErr } =
+      await admin.auth.admin.createUser({
+        email: input.email,
+        password: input.password,
+        email_confirm: true,
+        user_metadata: { role: 'collab' },
+      })
+    if (createErr || !created.user) {
+      return {
+        ok: false,
+        reason: 'create_failed',
+        message:
+          createErr?.message ??
+          'Could not create account for this collaborator.',
+      }
+    }
+    targetUserId = created.user.id
+    isNewUser = true
+
+    // Force role to collab on the profile (the trigger may have set it
+    // to 'dj' by default).
+    await admin
+      .from('profiles')
+      .update({ role: 'collab' })
+      .eq('user_id', targetUserId)
+  }
+
+  // Attach. ON CONFLICT DO NOTHING via upsert with onConflict.
+  const { error: attachErr } = await admin
+    .from('event_collaborators')
+    .upsert(
+      {
+        event_id: input.event_id,
+        user_id: targetUserId,
+        added_by: actor.id as string,
+      },
+      { onConflict: 'event_id,user_id', ignoreDuplicates: true }
+    )
+  if (attachErr) {
+    return { ok: false, reason: 'attach_failed', message: attachErr.message }
+  }
+
+  revalidatePath(`/events/${input.event_id}/edit`)
+  return { ok: true, isNewUser }
+}
+
+const RemoveCollabInput = z.object({
+  collaborator_id: z.string().uuid(),
+  event_id: z.string().uuid(),
+})
+
+export type RemoveCollabResult =
+  | { ok: true }
+  | { ok: false; reason: 'unauthorized' }
+  | { ok: false; reason: 'invalid'; message: string }
+  | { ok: false; reason: 'db_failed'; message: string }
+
+export async function removeEventCollaborator(
+  raw: unknown
+): Promise<RemoveCollabResult> {
+  const supabase = await createServerSupabaseClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, reason: 'unauthorized' }
+  const { data: actor } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!actor || actor.role !== 'admin') {
+    return { ok: false, reason: 'unauthorized' }
+  }
+
+  const parsed = RemoveCollabInput.safeParse(raw)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      message: parsed.error.issues[0]?.message ?? 'Bad input.',
+    }
+  }
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  // Note: we delete the attachment, not the auth user. The collab
+  // account is still valid and may be attached to other events.
+  const { error: delErr } = await admin
+    .from('event_collaborators')
+    .delete()
+    .eq('id', parsed.data.collaborator_id)
+  if (delErr) {
+    return { ok: false, reason: 'db_failed', message: delErr.message }
+  }
+
+  revalidatePath(`/events/${parsed.data.event_id}/edit`)
+  return { ok: true }
+}

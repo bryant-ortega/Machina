@@ -43,14 +43,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
   // Role gate. Note the column is profiles.user_id (FK to auth.users.id),
-  // not profiles.id. The (admin) layout uses the same query — keep them
-  // consistent so a /api/pdf admin matches an /events admin.
+  // not profiles.id. Admins get full access. Collabs are allowed too —
+  // RLS scopes which events they can fetch, so generating a PDF for an
+  // event they're not attached to will simply produce a "not_found"
+  // response when the queries return zero rows.
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
     .eq('user_id', user.id)
     .maybeSingle()
-  if (!profile || profile.role !== 'admin') {
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'collab')) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
@@ -61,6 +63,11 @@ export async function GET(req: Request) {
     return handleBudget(url, supabase)
   }
   if (view === 'month') {
+    // Month view exports the whole calendar — admins only. Collabs
+    // shouldn't see other LosGothsCo events.
+    if (profile.role !== 'admin') {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
     return handleMonth(url, supabase)
   }
 

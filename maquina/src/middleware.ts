@@ -51,6 +51,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.rewrite(new URL('/not-found', request.url))
   }
 
+  // /collab/* requires a session. Role enforcement (must be 'collab')
+  // happens in the collab layout — middleware only ensures someone is
+  // signed in before any /collab page renders.
+  if (path.startsWith('/collab') && !user) {
+    return NextResponse.rewrite(new URL('/not-found', request.url))
+  }
+
   return supabaseResponse
 }
 

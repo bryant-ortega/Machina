@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { EditEventForm } from './edit-event-form'
+import { CollaboratorsSection, type CollaboratorRow } from './collaborators-section'
 
 /**
  * Admin event edit page (Phase 7b).
@@ -28,6 +29,7 @@ export default async function EditEventPage({
     { data: slots },
     { data: djs },
     { data: venues },
+    { data: rawCollaborators },
   ] = await Promise.all([
     supabase
       .from('events')
@@ -57,9 +59,45 @@ export default async function EditEventPage({
       .from('venues')
       .select('id, name, city, state')
       .order('name', { ascending: true }),
+    // Phase 13: collaborators for this event. Join through auth.users
+    // for the email — but auth.users isn't directly readable, so we
+    // fetch ids here and look up emails via the admin client below.
+    supabase
+      .from('event_collaborators')
+      .select('id, user_id, created_at')
+      .eq('event_id', id)
+      .order('created_at', { ascending: true }),
   ])
 
   if (eventErr || !event) notFound()
+
+  // Phase 13: hydrate collaborator emails from auth.users via the
+  // service-role admin client. This is cheap because Cowork is small;
+  // revisit if the user roster grows past ~1k.
+  const collabRows: CollaboratorRow[] = []
+  if ((rawCollaborators ?? []).length > 0) {
+    const { createClient } = await import('@supabase/supabase-js')
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+    const { data: list } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 200,
+    })
+    const emailById = new Map<string, string>()
+    for (const u of list?.users ?? []) {
+      if (u.id && u.email) emailById.set(u.id, u.email)
+    }
+    for (const row of rawCollaborators ?? []) {
+      collabRows.push({
+        id: row.id as string,
+        email: emailById.get(row.user_id as string) ?? '(unknown email)',
+        added_at: row.created_at as string,
+      })
+    }
+  }
 
   // Supabase types the joined venue as either array or single. Coerce.
   const venueName =
@@ -172,6 +210,8 @@ export default async function EditEventPage({
             })),
           }}
         />
+
+        <CollaboratorsSection eventId={event.id as string} initial={collabRows} />
       </div>
     </div>
   )

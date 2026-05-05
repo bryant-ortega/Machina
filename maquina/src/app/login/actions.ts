@@ -61,6 +61,9 @@ export async function loginUser(formData: FormData): Promise<LoginResult | never
   if (role === 'admin') {
     redirect('/events')
   }
+  if (role === 'collab') {
+    redirect('/collab/events')
+  }
 
   // DJ — destination depends on whether their W-9 is on file.
   const { data: dj } = await supabase

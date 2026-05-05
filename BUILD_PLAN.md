@@ -63,7 +63,7 @@ These features are explicitly deferred. Do not scaffold, stub, or reference them
 
 The first working version of Maquina is complete when an Admin can:
 
-- Log in via magic link
+- Log in via email + password
 - View and manage the DJ roster
 - Upload a W-9 for a DJ
 - Create an event with named stages and DJ slot assignments
@@ -84,7 +84,7 @@ Everything else is post-MVP.
 | 0 | Repo, Supabase project, environment, folder structure |
 | 1 | Supabase schema — core tables only |
 | 2 | RLS policies |
-| 3 | Auth — Admin magic link login |
+| 3 | Auth — Email + password login |
 | 4 | Seed data |
 | 5 | DJ registration form + W-9 upload |
 | 6 | Admin DJ roster + DJ profile page |
@@ -94,7 +94,7 @@ Everything else is post-MVP.
 | 10 | Final budget + Est vs Final compare |
 | 11 | Run of Show view |
 | 12 | PDF export |
-| 13 | Partner role |
+| 13 | Collaboration Partner role (read-only, event-scoped) |
 | 14 | Override system |
 | 15 | Posting Calendar view |
 | 16 | DJ Analytics view |
@@ -656,7 +656,7 @@ CREATE POLICY "event_tix_tiers_all_admin" ON event_tix_tiers
 ## Phase 3 — Admin Auth
 
 ### Goal
-Admin can log in via magic link. Unauthenticated users hitting admin routes get a 404.
+Admin can log in via email + password. Unauthenticated users hitting admin routes get a 404. (Originally specced as magic-link; switched to email+password during build to avoid PKCE / email-prefetcher fragility — see /login + /forgot-password + /reset-password.)
 
 ### Steps
 
@@ -668,14 +668,14 @@ In Supabase Dashboard → Authentication → Users → Invite User:
 #### 3.2 — Login Page
 Create `src/app/login/page.tsx`:
 - Single email input field
-- "Send Magic Link" button
+- Email + password fields
 - On submit: calls `supabase.auth.signInWithOtp({ email })`
 - Success state: "Check your email for a login link"
-- No password field — magic link only
+- "Forgot password?" link to /forgot-password
 
 #### 3.3 — Auth Callback Route
 Create `src/app/auth/callback/route.ts`:
-- Handles the magic link redirect from Supabase
+- Handles the password-recovery redirect from Supabase (recovery URLs only)
 - Exchanges code for session
 - Redirects to `/(admin)/events` on success
 
@@ -689,8 +689,8 @@ Create `src/app/(admin)/layout.tsx`:
 - Sign out button that calls `supabase.auth.signOut()`
 
 ### Acceptance Criteria
-- [ ] Admin receives magic link email on submit
-- [ ] Clicking magic link logs in and redirects to `/(admin)/events`
+- [x] Admin can sign in with email + password and is redirected to `/events`
+- [x] Forgot-password sends a recovery email; recovery link lets user set a new password
 - [ ] Visiting `/(admin)/events` while logged out shows 404
 - [ ] Sign out clears session and redirects to `/login`
 - [ ] Admin name shows in sidebar
@@ -819,7 +819,7 @@ INSERT INTO event_tix_tiers (budget_id, tier_number, price, sold) VALUES
 ## Phase 5 — DJ Registration + W-9 Upload
 
 ### Goal
-Public DJ registration form with magic link flow. Authenticated W-9 upload page.
+Public DJ registration form (email + password). On submit the auth user + djs row are created and the user is signed in immediately, then prompted to upload their W-9. (Originally specced as magic-link; switched to password during the auth swap.)
 
 ### Routes to Build
 - `GET/POST /register/dj` — public registration form
@@ -830,7 +830,7 @@ Public DJ registration form with magic link flow. Authenticated W-9 upload page.
 - Form validation with `zod` + `react-hook-form`
 - On submit: call `supabase.auth.signInWithOtp({ email, options: { data: { role: 'dj', display_name: dj_name } } })`
 - The trigger from Phase 1 creates the `profiles` row automatically
-- After magic link verification, insert into `djs` table using the authenticated user's `auth.uid()`
+- After signup completes, insert into `djs` table using the authenticated user's `auth.uid()` (done in the registerDj server action via service-role admin client)
 - W-9 upload: accept PDF only, max 10MB, validate server-side
 - Store to Supabase Storage path: `w9s/{user_id}/w9.pdf`
 - Save path to `djs.w9_storage_path`; set `w9_status = 'on_file'`
@@ -863,7 +863,7 @@ Create `src/app/api/storage/signed-url/route.ts`:
 
 ### Acceptance Criteria
 - [ ] DJ can submit registration form
-- [ ] Magic link email arrives
+- [x] DJ self-registration creates auth user + djs row + signs the DJ in
 - [ ] After verification, DJ row exists in `djs` table
 - [ ] DJ can log in to `/dj/upload-w9` and upload a PDF
 - [ ] `w9_storage_path` populated; `w9_status` flips to `on_file`
@@ -1163,27 +1163,81 @@ npm install @react-pdf/renderer
 
 ---
 
-## Phase 13 — Partner Role
+## Phase 13 — Collaboration Partner Role (read-only, event-scoped)
 
 ### Goal
-Partner user can log in and access all views with read/write on operational data. Cannot delete, manage team, or trigger payments.
+External collaboration partners (people LosGothsCo co-promotes specific events with) can log in and view **only the events they're attached to**. They have read-only access to those events' details, run-of-show, and budget. They cannot edit anything, cannot see other LosGothsCo events, cannot see the DJ roster, and cannot access settings or admin views.
+
+> Note on terminology: this is **not** a co-admin / co-owner role. The LosGothsCo internal team (Chase, Elvis) all use `role = 'admin'` and have full access. The "collaboration partner" here is a third-party promoter, venue contact, or co-host whose access should be narrowly scoped to a single event.
+
+### Tables to Add
+```sql
+-- Junction table: which collaborators see which events.
+CREATE TABLE event_collaborators (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  added_by uuid REFERENCES profiles(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (event_id, user_id)
+);
+
+ALTER TABLE event_collaborators ENABLE ROW LEVEL SECURITY;
+
+-- Admins do everything.
+CREATE POLICY "event_collaborators_all_admin"
+  ON event_collaborators FOR ALL
+  USING (get_my_role() = 'admin');
+
+-- Collaborators can read their own attachments (so the events list query
+-- can join through this table).
+CREATE POLICY "event_collaborators_read_self"
+  ON event_collaborators FOR SELECT
+  USING (user_id = auth.uid());
+```
+
+Add `'collab'` to the `profiles.role` check constraint.
+
+### RLS Policy Pattern
+For every event-scoped table (events, event_stages, event_dj_slots, event_budgets, event_budget_expenses, event_tix_tiers), add a `SELECT` policy that allows collaborators to read rows whose `event_id` is in `event_collaborators` for `auth.uid()`. **No write policies** — collaborators are read-only.
+
+Example for `events`:
+```sql
+CREATE POLICY "events_read_collab"
+  ON events FOR SELECT
+  USING (
+    get_my_role() = 'collab'
+    AND id IN (
+      SELECT event_id FROM event_collaborators WHERE user_id = auth.uid()
+    )
+  );
+```
+
+The same pattern repeats for child tables, swapping `id` for `event_id`. `djs` and `venues` are looked up by id when joined into events the collaborator can see; allow `SELECT` for `collab` on those too, but only to support the joins (no row-level scoping needed beyond that).
 
 ### Implementation Notes
-- Invite partner via Supabase Dashboard → manually set `profiles.role = 'partner'`
-- Update RLS policies to add partner access alongside admin:
-  - Read: events, djs, venues, budgets, views
-  - Write: events (no delete), event stages, DJ slots, budget expenses/income
-  - No access: team settings, payment triggers, partner split configuration
-- Update middleware to allow partner role on admin routes
-- UI: hide Delete buttons, Payment buttons, and Settings nav items for partner role
-- Partner sees own profit split on budget view only
+- New role `collab` in `profiles.role` check.
+- Migration creates `event_collaborators` + RLS policies.
+- New page `/collab/events` shows the collaborator's events (filtered list).
+- Reuse the existing `/events/[id]/runofshow` and `/events/[id]/budget` pages — RLS already filters; just hide edit-mode UI for non-admins. Add a `roleHidesEdit` prop or just check `role !== 'admin'` in the page.
+- Middleware: route `/collab/*` for collab users; redirect them away from `/events`, `/djs`, `/views/*`, `/settings/*`.
+- Admin event edit page gains a "Collaborators" section: list current collaborators on this event + add (by email lookup of an existing auth user) + remove.
+- Auth callback / login redirect: collabs land on `/collab/events`.
+
+### UI Behavior
+- Collab views show **no Edit / Delete / Export / Actualize buttons**. Only "Run of show" and "Budget" tabs.
+- Budget view for collab is read-only and hides expense item edit, but shows summary numbers.
+- No nav sidebar — collabs see a stripped chrome with just their event list and the back button.
+- The "Run of show" and "Budget" PDFs **are** still exportable for collabs (read-only view of an event already includes those).
 
 ### Acceptance Criteria
-- [ ] Partner can log in and see all events and views
-- [ ] Partner can create and edit events
-- [ ] Partner cannot delete events (button hidden + RLS blocks it)
-- [ ] Partner cannot access `/settings/team` or `/settings/partners`
-- [ ] Partner sees own profit split % on budget view
+- [ ] Collab user can log in and lands on `/collab/events`.
+- [ ] `/collab/events` shows only events the user is attached to via `event_collaborators`.
+- [ ] Clicking an event opens a read-only run-of-show + budget view.
+- [ ] Direct visits to `/events`, `/djs`, `/views/year`, etc. return 404 / not-allowed for collabs.
+- [ ] Collabs cannot see events they're not attached to (verified by RLS, not just UI).
+- [ ] Admin can add and remove a collaborator from an event in the event edit page.
+- [ ] Removing a collaborator immediately revokes their access on next request.
 
 ---
 
@@ -1445,7 +1499,7 @@ RESEND_API_KEY=your-resend-api-key
 
 ### Implementation Notes
 - Install Resend: `npm install resend`
-- Registration confirmation: trigger after magic link verified + DJ row created
+- Registration confirmation: trigger after DJ self-registration completes (auth user + djs row created)
 - W-9 reminder: Vercel Cron at `src/app/api/cron/w9-reminders/route.ts`
   - Schedule: `0 9 * * 1` (every Monday 9am)
   - Query all DJs with `w9_status = 'pending'`
