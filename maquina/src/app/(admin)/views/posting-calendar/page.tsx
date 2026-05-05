@@ -188,7 +188,7 @@ export default async function PostingCalendarPage({
                         >
                           {a.eventTitle}
                         </Link>
-                        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
                           Event{' '}
                           {new Date(`${a.eventDate}T00:00:00`).toLocaleDateString(
                             undefined,
@@ -198,8 +198,11 @@ export default async function PostingCalendarPage({
                               year: 'numeric',
                             }
                           )}{' '}
-                          · {a.eventCity}
-                          {a.eventState ? `, ${a.eventState}` : ''}
+                          ·{' '}
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                            {a.eventCity || '—'}
+                            {a.eventState ? `, ${a.eventState}` : ''}
+                          </span>
                         </p>
                       </div>
                       <ActionBadge type={a.actionType} label={a.label} />
