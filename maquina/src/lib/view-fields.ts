@@ -101,6 +101,27 @@ export type EventViewRow = {
   venue_address?: string | null
   dj_count?: number | null
   headliner_name?: string | null
+
+  // Budget aggregates — computed by the renderer via computeBudget().
+  // The View Builder never exposes individual line items (per-DJ
+  // rates, per-tier ticket counts, expense rows). It only deals in
+  // these scalar totals. Null when no estimated budget exists for the
+  // event — accessors null-coalesce to 0 for currency/number fields.
+  est_expenses?: number | null
+  est_income?: number | null
+  est_profit?: number | null
+  walkout?: number | null
+  losgothsco_tix_net?: number | null
+  gross_tix_sold?: number | null
+  gross_tix_total?: number | null
+  paid_attendance?: number | null
+  total_attendance?: number | null
+  bar_gross?: number | null
+  losgothsco_bar?: number | null
+  merch_gross?: number | null
+  net_merch?: number | null
+  sponsor_income?: number | null
+  vendor_income?: number | null
 }
 
 export type FieldDef = {
@@ -160,7 +181,26 @@ export const FIELDS: readonly FieldDef[] = [
   { key: 'headliner_name', label: 'Headliner',     category: 'lineup',    kind: 'text',    accessor: (r) => r.headliner_name ?? '' },
 
   // -------- Financials --------
-  { key: 'split_pct',      label: 'Split %',       category: 'financial', kind: 'percent', accessor: (r) => r.split_pct ?? 0 },
+  // The View Builder deliberately exposes only aggregate totals — never
+  // individual line items (per-DJ rates, per-tier ticket counts,
+  // expense rows). All currency fields here are computed by the
+  // renderer via computeBudget() over the event's *estimated* budget.
+  { key: 'split_pct',         label: 'Split %',          category: 'financial', kind: 'percent',  accessor: (r) => r.split_pct ?? 0 },
+  { key: 'paid_attendance',   label: 'Paid attendance',  category: 'financial', kind: 'number',   accessor: (r) => r.paid_attendance ?? 0 },
+  { key: 'total_attendance',  label: 'Total attendance', category: 'financial', kind: 'number',   accessor: (r) => r.total_attendance ?? 0 },
+  { key: 'gross_tix_sold',    label: 'Tix sold',         category: 'financial', kind: 'number',   accessor: (r) => r.gross_tix_sold ?? 0 },
+  { key: 'gross_tix_total',   label: 'Tix gross',        category: 'financial', kind: 'currency', accessor: (r) => r.gross_tix_total ?? 0 },
+  { key: 'losgothsco_tix_net',label: 'Tix net (LGCo)',   category: 'financial', kind: 'currency', accessor: (r) => r.losgothsco_tix_net ?? 0 },
+  { key: 'bar_gross',         label: 'Bar gross',        category: 'financial', kind: 'currency', accessor: (r) => r.bar_gross ?? 0 },
+  { key: 'losgothsco_bar',    label: 'Bar (LGCo)',       category: 'financial', kind: 'currency', accessor: (r) => r.losgothsco_bar ?? 0 },
+  { key: 'merch_gross',       label: 'Merch gross',      category: 'financial', kind: 'currency', accessor: (r) => r.merch_gross ?? 0 },
+  { key: 'net_merch',         label: 'Merch net',        category: 'financial', kind: 'currency', accessor: (r) => r.net_merch ?? 0 },
+  { key: 'sponsor_income',    label: 'Sponsor income',   category: 'financial', kind: 'currency', accessor: (r) => r.sponsor_income ?? 0 },
+  { key: 'vendor_income',     label: 'Vendor income',    category: 'financial', kind: 'currency', accessor: (r) => r.vendor_income ?? 0 },
+  { key: 'walkout',           label: 'Walkout',          category: 'financial', kind: 'currency', accessor: (r) => r.walkout ?? 0 },
+  { key: 'est_expenses',      label: 'Est. expenses',    category: 'financial', kind: 'currency', accessor: (r) => r.est_expenses ?? 0 },
+  { key: 'est_income',        label: 'Est. income',      category: 'financial', kind: 'currency', accessor: (r) => r.est_income ?? 0 },
+  { key: 'est_profit',        label: 'Est. profit',      category: 'financial', kind: 'currency', accessor: (r) => r.est_profit ?? 0 },
 ] as const
 
 // ---------------------------------------------------------------------------
