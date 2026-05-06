@@ -6,10 +6,11 @@ import { DjAnalyticsToolbar } from './toolbar'
  * DJ Analytics — Phase 16.
  *
  * For each registered DJ: how many *confirmed* events were they slotted
- * into in the selected calendar year, and what percentage of the year's
- * confirmed events that represents (DJ's confirmed events ÷ year's total
- * confirmed events). Tentative events are ignored throughout — this view
- * is about who's on the books, not who might be.
+ * into so far this year (year-to-date — events that have already
+ * happened), and what percentage of the year's confirmed-and-completed
+ * events that represents (DJ's confirmed events ÷ year-to-date confirmed
+ * events). Tentative events are ignored throughout, and future-confirmed
+ * events don't count yet — this view is about what's actually been played.
  *
  * Counts are *distinct events*, so a DJ playing two stages or two slots
  * at the same event still counts once for that event. This matches how
@@ -36,8 +37,15 @@ export default async function DjAnalyticsPage({
   const sort: SortKey =
     sp.sort === 'name' || sp.sort === 'pct' ? sp.sort : 'count'
 
+  // YTD bounds: from Jan 1 of the selected year up through *today*.
+  // "Confirmed events so far this year" means events that have actually
+  // happened, not future-confirmed bookings. If the selected year is in
+  // the past, lastISO clamps to Dec 31 of that year. If it's a future
+  // year, the range is empty (and the page just shows zero).
   const firstISO = `${year}-01-01`
-  const lastISO = `${year}-12-31`
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const yearEndISO = `${year}-12-31`
+  const lastISO = todayISO < yearEndISO ? todayISO : yearEndISO
 
   const supabase = await createServerSupabaseClient()
 
@@ -139,7 +147,8 @@ export default async function DjAnalyticsPage({
             {totalConfirmedThisYear}{' '}
             {totalConfirmedThisYear === 1
               ? 'confirmed event'
-              : 'confirmed events'}
+              : 'confirmed events'}{' '}
+            so far
           </p>
         </header>
 
