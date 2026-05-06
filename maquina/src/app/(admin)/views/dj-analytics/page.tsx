@@ -6,8 +6,8 @@ import { DjAnalyticsToolbar } from './toolbar'
  * DJ Analytics — Phase 16.
  *
  * For each registered DJ: how many events were they slotted into in the
- * selected calendar year, and what percentage of those events are
- * `confirmed` (vs. tentative)?
+ * selected calendar year, and what share of the year's confirmed lineup
+ * they're on (their confirmed events ÷ total confirmed events that year).
  *
  * Counts are *distinct events*, so a DJ playing two stages or two slots
  * at the same event still counts once for that event. This matches how
@@ -99,11 +99,23 @@ export default async function DjAnalyticsPage({
     pct: number // 0..100, integer
   }
 
+  // Total confirmed events this year is the denominator for the
+  // "share of the year's confirmed lineup" metric — this is the
+  // percentage that the architecture doc actually asks for: "what
+  // portion of the year's confirmed shows is this DJ on?"
+  let totalConfirmedThisYear = 0
+  for (const status of eventStatusById.values()) {
+    if (status === 'confirmed') totalConfirmedThisYear++
+  }
+
   const rows: Row[] = (djs ?? []).map((d) => {
     const t = totalsByDj.get(d.id)
     const total = t?.events.size ?? 0
     const confirmed = t?.confirmed.size ?? 0
-    const pct = total === 0 ? 0 : Math.round((confirmed / total) * 100)
+    const pct =
+      totalConfirmedThisYear === 0
+        ? 0
+        : Math.round((confirmed / totalConfirmedThisYear) * 100)
     return {
       id: d.id,
       djName: d.dj_name,
@@ -169,7 +181,7 @@ export default async function DjAnalyticsPage({
                     Confirmed
                   </th>
                   <th className="px-4 py-2 text-right font-semibold">
-                    Confirmed %
+                    Share of confirmed
                   </th>
                 </tr>
               </thead>
@@ -202,7 +214,7 @@ export default async function DjAnalyticsPage({
                       {r.confirmed}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      <PctCell pct={r.pct} hasData={r.total > 0} />
+                      <PctCell pct={r.pct} hasData={r.confirmed > 0} />
                     </td>
                   </tr>
                 ))}
@@ -225,10 +237,13 @@ function PctCell({ pct, hasData }: { pct: number; hasData: boolean }) {
   if (!hasData) {
     return <span className="text-zinc-400 dark:text-zinc-600">—</span>
   }
+  // Thresholds tuned for "share of the year's confirmed lineup": being
+  // on ≥30% of confirmed events is a workhorse, ≥10% is a regular,
+  // below that is occasional.
   const cls =
-    pct >= 80
+    pct >= 30
       ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
-      : pct >= 50
+      : pct >= 10
         ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200'
         : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
   return (

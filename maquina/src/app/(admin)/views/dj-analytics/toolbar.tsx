@@ -59,7 +59,7 @@ export function DjAnalyticsToolbar({
           className={selectClass}
         >
           <option value="count">Most events</option>
-          <option value="pct">Highest confirmed %</option>
+          <option value="pct">Largest share of confirmed</option>
           <option value="name">DJ name (A–Z)</option>
         </select>
       </label>
