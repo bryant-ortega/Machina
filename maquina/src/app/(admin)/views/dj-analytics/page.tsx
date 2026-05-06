@@ -5,9 +5,11 @@ import { DjAnalyticsToolbar } from './toolbar'
 /**
  * DJ Analytics — Phase 16.
  *
- * For each registered DJ: how many events were they slotted into in the
- * selected calendar year, and what share of the year's confirmed lineup
- * they're on (their confirmed events ÷ total confirmed events that year).
+ * For each registered DJ: how many *confirmed* events were they slotted
+ * into in the selected calendar year, and what percentage of the year's
+ * confirmed events that represents (DJ's confirmed events ÷ year's total
+ * confirmed events). Tentative events are ignored throughout — this view
+ * is about who's on the books, not who might be.
  *
  * Counts are *distinct events*, so a DJ playing two stages or two slots
  * at the same event still counts once for that event. This matches how
@@ -46,22 +48,22 @@ export default async function DjAnalyticsPage({
     .select('id, dj_name, region, rank')
     .order('dj_name', { ascending: true })
 
-  // Two-step query: first pull every event in the year (so we know the
-  // confirmed/tentative status of each one), then pull slots for those
-  // events. We avoid PostgREST's nested join because its generated
-  // types treat the nested row as an array, which is a pain to cast
-  // around for what's really a single FK.
+  // Confirmed events for the year. Tentative events are explicitly
+  // excluded — both the per-DJ event count and the percentage
+  // denominator are confirmed-only.
   const { data: yearEvents } = await supabase
     .from('events')
-    .select('id, status')
+    .select('id')
+    .eq('status', 'confirmed')
     .gte('date', firstISO)
     .lte('date', lastISO)
 
-  const eventStatusById = new Map<string, string>()
+  const confirmedEventIds = new Set<string>()
   for (const e of yearEvents ?? []) {
-    eventStatusById.set(e.id, e.status)
+    confirmedEventIds.add(e.id)
   }
-  const eventIds = Array.from(eventStatusById.keys())
+  const eventIds = Array.from(confirmedEventIds)
+  const totalConfirmedThisYear = confirmedEventIds.size
 
   let slots: { dj_id: string; event_id: string }[] = []
   if (eventIds.length > 0) {
@@ -72,21 +74,15 @@ export default async function DjAnalyticsPage({
     slots = data ?? []
   }
 
-  // Roll up to per-DJ counts of *distinct* events.
-  const totalsByDj = new Map<
-    string,
-    { events: Set<string>; confirmed: Set<string> }
-  >()
+  // Roll up to per-DJ counts of *distinct* confirmed events. The slot
+  // query was already scoped to confirmedEventIds, but we still dedupe
+  // here in case a DJ plays multiple stages of the same event.
+  const eventsByDj = new Map<string, Set<string>>()
   for (const row of slots) {
-    const status = eventStatusById.get(row.event_id)
-    if (!status) continue
-    const bucket = totalsByDj.get(row.dj_id) ?? {
-      events: new Set<string>(),
-      confirmed: new Set<string>(),
-    }
-    bucket.events.add(row.event_id)
-    if (status === 'confirmed') bucket.confirmed.add(row.event_id)
-    totalsByDj.set(row.dj_id, bucket)
+    if (!confirmedEventIds.has(row.event_id)) continue
+    const set = eventsByDj.get(row.dj_id) ?? new Set<string>()
+    set.add(row.event_id)
+    eventsByDj.set(row.dj_id, set)
   }
 
   type Row = {
@@ -94,24 +90,12 @@ export default async function DjAnalyticsPage({
     djName: string
     region: string
     rank: string | null
-    total: number
     confirmed: number
     pct: number // 0..100, integer
   }
 
-  // Total confirmed events this year is the denominator for the
-  // "share of the year's confirmed lineup" metric — this is the
-  // percentage that the architecture doc actually asks for: "what
-  // portion of the year's confirmed shows is this DJ on?"
-  let totalConfirmedThisYear = 0
-  for (const status of eventStatusById.values()) {
-    if (status === 'confirmed') totalConfirmedThisYear++
-  }
-
   const rows: Row[] = (djs ?? []).map((d) => {
-    const t = totalsByDj.get(d.id)
-    const total = t?.events.size ?? 0
-    const confirmed = t?.confirmed.size ?? 0
+    const confirmed = eventsByDj.get(d.id)?.size ?? 0
     const pct =
       totalConfirmedThisYear === 0
         ? 0
@@ -121,7 +105,6 @@ export default async function DjAnalyticsPage({
       djName: d.dj_name,
       region: d.region,
       rank: d.rank ?? null,
-      total,
       confirmed,
       pct,
     }
@@ -136,13 +119,12 @@ export default async function DjAnalyticsPage({
       return a.djName.localeCompare(b.djName)
     }
     // sort === 'count'
-    if (b.total !== a.total) return b.total - a.total
+    if (b.confirmed !== a.confirmed) return b.confirmed - a.confirmed
     return a.djName.localeCompare(b.djName)
   })
 
   const yearRange = buildYearRange(year)
-  const totalEventsThisYear = new Set(slots.map((r) => r.event_id)).size
-  const bookedDjCount = rows.filter((r) => r.total > 0).length
+  const bookedDjCount = rows.filter((r) => r.confirmed > 0).length
 
   return (
     <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
@@ -154,8 +136,10 @@ export default async function DjAnalyticsPage({
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             {year} · {bookedDjCount}{' '}
             {bookedDjCount === 1 ? 'DJ' : 'DJs'} booked across{' '}
-            {totalEventsThisYear}{' '}
-            {totalEventsThisYear === 1 ? 'event' : 'events'}
+            {totalConfirmedThisYear}{' '}
+            {totalConfirmedThisYear === 1
+              ? 'confirmed event'
+              : 'confirmed events'}
           </p>
         </header>
 
@@ -176,12 +160,11 @@ export default async function DjAnalyticsPage({
                 <tr>
                   <th className="px-4 py-2 text-left font-semibold">DJ</th>
                   <th className="px-4 py-2 text-left font-semibold">Region</th>
-                  <th className="px-4 py-2 text-right font-semibold">Events</th>
                   <th className="px-4 py-2 text-right font-semibold">
-                    Confirmed
+                    Confirmed events
                   </th>
                   <th className="px-4 py-2 text-right font-semibold">
-                    Share of confirmed
+                    % of year
                   </th>
                 </tr>
               </thead>
@@ -208,9 +191,6 @@ export default async function DjAnalyticsPage({
                       {r.region}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-zinc-900 dark:text-zinc-100">
-                      {r.total}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-zinc-700 dark:text-zinc-300">
                       {r.confirmed}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
@@ -237,9 +217,8 @@ function PctCell({ pct, hasData }: { pct: number; hasData: boolean }) {
   if (!hasData) {
     return <span className="text-zinc-400 dark:text-zinc-600">—</span>
   }
-  // Thresholds tuned for "share of the year's confirmed lineup": being
-  // on ≥30% of confirmed events is a workhorse, ≥10% is a regular,
-  // below that is occasional.
+  // Thresholds tuned for "share of the year's confirmed events": ≥30%
+  // is a workhorse, ≥10% is a regular, below that is occasional.
   const cls =
     pct >= 30
       ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
