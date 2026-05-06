@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { duplicateViewForm } from './actions'
 
 /**
  * Views index — Phase 17c.
@@ -97,12 +98,15 @@ export default async function ViewsIndexPage() {
                         Open
                       </Link>
                     ) : null}
-                    <Link
-                      href={`/views/${v.id}/duplicate`}
-                      className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    >
-                      Duplicate
-                    </Link>
+                    <form action={duplicateViewForm}>
+                      <input type="hidden" name="id" value={v.id} />
+                      <button
+                        type="submit"
+                        className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                      >
+                        Duplicate
+                      </button>
+                    </form>
                   </div>
                 </li>
               ))}
