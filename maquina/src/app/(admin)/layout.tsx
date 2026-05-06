@@ -49,6 +49,7 @@ export default async function AdminLayout({
     <>
       <nav className="flex-1 space-y-1 px-3 py-4">
         <NavLink href="/events">Events</NavLink>
+        <NavLink href="/views">Views</NavLink>
         <NavLink href="/views/month">Month view</NavLink>
         <NavLink href="/views/year">Year view</NavLink>
         <NavLink href="/views/posting-calendar">Posting calendar</NavLink>
