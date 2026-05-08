@@ -12,7 +12,7 @@ import {
   type EventType,
   type SlotType,
 } from '@/lib/event-defaults'
-import { updateEvent, type UpdateEventResult } from './actions'
+import { deleteEvent, updateEvent, type UpdateEventResult } from './actions'
 
 /**
  * Admin event-edit form.
@@ -102,6 +102,7 @@ export function EditEventForm({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [deleting, startDelete] = useTransition()
   const [topError, setTopError] = useState<string | null>(null)
   const [topSuccess, setTopSuccess] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -390,6 +391,24 @@ export function EditEventForm({
   }
 
   // ---------------------------------------------------------------- Render
+
+  function handleDelete() {
+    if (
+      !confirm(
+        `Delete "${title || initial.title}"? This permanently removes the event, its stages, slots, budget, and any collaborators. This can't be undone.`
+      )
+    ) {
+      return
+    }
+    startDelete(async () => {
+      const result = await deleteEvent({ event_id: initial.id })
+      // deleteEvent calls redirect() on success — control should never
+      // return here in the success path.
+      if (!result?.ok) {
+        setTopError(deleteErrorMessage(result))
+      }
+    })
+  }
 
   return (
     <form onSubmit={onSubmit} className="space-y-8" noValidate>
@@ -928,10 +947,18 @@ export function EditEventForm({
       <div className="flex items-center gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || deleting}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
         >
           {pending ? 'Saving…' : 'Save changes'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={pending || deleting}
+          className="ml-auto rounded-md border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900/60 dark:bg-zinc-950 dark:text-rose-300 dark:hover:bg-rose-950/40"
+        >
+          {deleting ? 'Deleting…' : 'Delete event'}
         </button>
         {topSuccess && (
           <span className="text-xs text-emerald-600 dark:text-emerald-400">
@@ -1029,4 +1056,23 @@ function Checkbox({
       {label}
     </label>
   )
+}
+
+function deleteErrorMessage(
+  result?: { ok: false; reason: string; message?: string } | { ok: true }
+): string {
+  if (!result) return 'Delete failed.'
+  if (result.ok) return 'OK'
+  switch (result.reason) {
+    case 'unauth':
+      return 'You must be signed in.'
+    case 'forbidden':
+      return 'Only admins can delete events.'
+    case 'invalid':
+      return result.message ?? 'Invalid input.'
+    case 'db_failed':
+      return result.message ?? 'Database error. Try again.'
+    default:
+      return 'Something went wrong.'
+  }
 }

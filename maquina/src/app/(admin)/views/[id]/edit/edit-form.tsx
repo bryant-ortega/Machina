@@ -3,6 +3,23 @@
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, useTransition } from 'react'
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   FIELDS,
   FIELD_BY_KEY,
   FIELD_CATEGORIES,
@@ -11,15 +28,16 @@ import {
 import { saveView, deleteView } from '../../actions'
 
 /**
- * Edit-view client component. State is local: every interaction
- * (toggle, rename, reorder, add, remove) mutates the in-memory
- * `selected` list. The Save button posts the whole list to the
- * saveView server action which diffs and writes.
+ * Edit-view client component (Phase 17d + 17e drag-to-reorder).
  *
- * Why one big save instead of per-row server actions: keeps the UX
- * fast (no flicker on every drag) and the server logic simple (one
- * authoritative diff). The form preserves position by ordering
- * `selected` — we re-number to 0..N-1 right before save.
+ * State is local: every interaction (toggle, rename, drag, add,
+ * remove) mutates the in-memory `selected` list. The Save button
+ * posts the whole list to the saveView server action.
+ *
+ * Drag is wired with @dnd-kit/core + sortable. Each row has a grip
+ * handle on the left; drag from there to reorder. The KeyboardSensor
+ * gives full keyboard accessibility — Tab to the handle, Space to pick
+ * up, Arrow keys to move, Space to drop.
  */
 export function EditViewForm({
   view,
@@ -72,6 +90,29 @@ export function EditViewForm({
     return groups
   }, [selectedKeys])
 
+  // Drag sensors: pointer needs a small movement threshold so click
+  // events on the inner inputs/buttons aren't intercepted as drag
+  // starts. Keyboard sensor uses dnd-kit's standard coordinates.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    setSelected((cur) => {
+      const oldIdx = cur.findIndex((f) => f.field_key === active.id)
+      const newIdx = cur.findIndex((f) => f.field_key === over.id)
+      if (oldIdx === -1 || newIdx === -1) return cur
+      return arrayMove(cur, oldIdx, newIdx)
+    })
+  }
+
   function addField(key: string) {
     const def = FIELD_BY_KEY.get(key)
     if (!def) return
@@ -88,18 +129,6 @@ export function EditViewForm({
 
   function removeField(key: string) {
     setSelected((cur) => cur.filter((f) => f.field_key !== key))
-  }
-
-  function moveField(key: string, dir: -1 | 1) {
-    setSelected((cur) => {
-      const idx = cur.findIndex((f) => f.field_key === key)
-      if (idx === -1) return cur
-      const j = idx + dir
-      if (j < 0 || j >= cur.length) return cur
-      const next = cur.slice()
-      ;[next[idx], next[j]] = [next[j], next[idx]]
-      return next
-    })
   }
 
   function updateField(key: string, patch: Partial<SelectedField>) {
@@ -121,7 +150,10 @@ export function EditViewForm({
       // produce gaps otherwise.
       fields: selected.map((f, i) => ({
         field_key: f.field_key,
-        label: f.label.trim() || FIELD_BY_KEY.get(f.field_key)?.label || f.field_key,
+        label:
+          f.label.trim() ||
+          FIELD_BY_KEY.get(f.field_key)?.label ||
+          f.field_key,
         position: i,
         visible: f.visible,
       })),
@@ -216,7 +248,8 @@ export function EditViewForm({
             Selected fields
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {selected.length} field{selected.length === 1 ? '' : 's'}
+            {selected.length} field{selected.length === 1 ? '' : 's'}{' '}
+            · drag the grip to reorder
           </p>
         </header>
 
@@ -225,74 +258,27 @@ export function EditViewForm({
             No fields yet. Add some from the list below.
           </div>
         ) : (
-          <ol className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-            {selected.map((f, i) => {
-              const def = FIELD_BY_KEY.get(f.field_key)
-              return (
-                <li
-                  key={f.field_key}
-                  className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-zinc-100 px-3 py-2.5 last:border-b-0 dark:border-zinc-900"
-                >
-                  <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300">
-                    <input
-                      type="checkbox"
-                      checked={f.visible}
-                      onChange={(e) =>
-                        updateField(f.field_key, {
-                          visible: e.target.checked,
-                        })
-                      }
-                      className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-900"
-                    />
-                    Show
-                  </label>
-
-                  <div className="min-w-0">
-                    <input
-                      type="text"
-                      value={f.label}
-                      onChange={(e) =>
-                        updateField(f.field_key, {
-                          label: e.target.value,
-                        })
-                      }
-                      maxLength={80}
-                      placeholder={def?.label ?? f.field_key}
-                      className={`${inputClass} text-sm`}
-                    />
-                    <p className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-600">
-                      {def?.category} · {def?.kind} · {f.field_key}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-1">
-                    <ArrowButton
-                      label="Move up"
-                      disabled={i === 0}
-                      onClick={() => moveField(f.field_key, -1)}
-                    >
-                      ↑
-                    </ArrowButton>
-                    <ArrowButton
-                      label="Move down"
-                      disabled={i === selected.length - 1}
-                      onClick={() => moveField(f.field_key, 1)}
-                    >
-                      ↓
-                    </ArrowButton>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => removeField(f.field_key)}
-                    className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-rose-400 dark:hover:bg-rose-950/40"
-                  >
-                    Remove
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={selected.map((f) => f.field_key)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ol className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+                {selected.map((f) => (
+                  <SortableRow
+                    key={f.field_key}
+                    field={f}
+                    onUpdate={updateField}
+                    onRemove={removeField}
+                  />
+                ))}
+              </ol>
+            </SortableContext>
+          </DndContext>
         )}
       </section>
 
@@ -347,7 +333,9 @@ export function EditViewForm({
           ) : savedAt ? (
             <span>Saved {savedAt.toLocaleTimeString()}.</span>
           ) : (
-            <span>Unsaved changes won&apos;t persist until you hit Save.</span>
+            <span>
+              Unsaved changes won&apos;t persist until you hit Save.
+            </span>
           )}
         </div>
         <div className="flex gap-2">
@@ -369,6 +357,114 @@ export function EditViewForm({
         </div>
       </div>
     </form>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SortableRow — one row in the selected fields list, wired to dnd-kit.
+// ---------------------------------------------------------------------------
+
+function SortableRow({
+  field,
+  onUpdate,
+  onRemove,
+}: {
+  field: SelectedField
+  onUpdate: (key: string, patch: Partial<SelectedField>) => void
+  onRemove: (key: string) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: field.field_key })
+
+  const def = FIELD_BY_KEY.get(field.field_key)
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    // While dragging, lift the row visually so it's clearly "picked up".
+    opacity: isDragging ? 0.6 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  }
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-zinc-100 bg-white px-3 py-2.5 last:border-b-0 dark:border-zinc-900 dark:bg-zinc-950"
+    >
+      {/* Drag handle */}
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+        className="grid h-7 w-7 cursor-grab place-items-center rounded-md text-zinc-400 hover:bg-zinc-100 active:cursor-grabbing dark:text-zinc-500 dark:hover:bg-zinc-900"
+      >
+        <GripIcon />
+      </button>
+
+      <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300">
+        <input
+          type="checkbox"
+          checked={field.visible}
+          onChange={(e) =>
+            onUpdate(field.field_key, { visible: e.target.checked })
+          }
+          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-900"
+        />
+        Show
+      </label>
+
+      <div className="min-w-0">
+        <input
+          type="text"
+          value={field.label}
+          onChange={(e) =>
+            onUpdate(field.field_key, { label: e.target.value })
+          }
+          maxLength={80}
+          placeholder={def?.label ?? field.field_key}
+          className={`${inputClass} text-sm`}
+        />
+        <p className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-600">
+          {def?.category} · {def?.kind} · {field.field_key}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onRemove(field.field_key)}
+        className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-rose-400 dark:hover:bg-rose-950/40"
+      >
+        Remove
+      </button>
+    </li>
+  )
+}
+
+function GripIcon() {
+  // 6-dot grip — small, monochrome, no extra dep.
+  return (
+    <svg
+      viewBox="0 0 12 16"
+      width="12"
+      height="16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <circle cx="3" cy="3" r="1.25" />
+      <circle cx="9" cy="3" r="1.25" />
+      <circle cx="3" cy="8" r="1.25" />
+      <circle cx="9" cy="8" r="1.25" />
+      <circle cx="3" cy="13" r="1.25" />
+      <circle cx="9" cy="13" r="1.25" />
+    </svg>
   )
 }
 
@@ -407,30 +503,6 @@ function Field({
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{hint}</p>
       ) : null}
     </div>
-  )
-}
-
-function ArrowButton({
-  children,
-  disabled,
-  onClick,
-  label,
-}: {
-  children: React.ReactNode
-  disabled: boolean
-  onClick: () => void
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      className="grid h-7 w-7 place-items-center rounded-md border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 disabled:opacity-30 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
-    >
-      {children}
-    </button>
   )
 }
 

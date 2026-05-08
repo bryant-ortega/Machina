@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
@@ -777,4 +778,67 @@ export async function removeEventCollaborator(
 
   revalidatePath(`/events/${parsed.data.event_id}/edit`)
   return { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// deleteEvent — admin removes an event entirely.
+//
+// FK cascades clean up everything attached to the event:
+//   - event_stages
+//   - event_dj_slots
+//   - event_budgets (which further cascades to event_budget_expenses
+//     and event_tix_tiers)
+//   - event_collaborators
+//   - event_view_customizations (once migration 0010 is applied)
+//
+// Returns ok:true with a redirect to /events on success. Form-action
+// callers should rely on the redirect; programmatic callers see
+// {ok:true} and can navigate themselves.
+// ---------------------------------------------------------------------------
+
+const DeleteEventInput = z.object({ event_id: z.string().uuid() })
+
+export type DeleteEventResult =
+  | { ok: true }
+  | { ok: false; reason: 'unauth' | 'forbidden' | 'invalid' | 'db_failed'; message?: string }
+
+export async function deleteEvent(input: { event_id: string }): Promise<DeleteEventResult> {
+  const parsed = DeleteEventInput.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, reason: 'invalid', message: parsed.error.message }
+  }
+
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, reason: 'unauth' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (profile?.role !== 'admin') return { ok: false, reason: 'forbidden' }
+
+  const { error } = await supabase
+    .from('events')
+    .delete()
+    .eq('id', parsed.data.event_id)
+  if (error) return { ok: false, reason: 'db_failed', message: error.message }
+
+  revalidatePath('/events')
+  revalidatePath('/views/month')
+  revalidatePath('/views/year')
+  revalidatePath('/views/posting-calendar')
+  revalidatePath('/views/dj-analytics')
+  redirect('/events')
+}
+
+/**
+ * Form-action wrapper for deleteEvent — lets <form action={...}> in a
+ * server component call it directly. Reads event_id from a hidden
+ * input.
+ */
+export async function deleteEventForm(formData: FormData): Promise<void> {
+  const id = String(formData.get('event_id') ?? '')
+  await deleteEvent({ event_id: id })
 }
