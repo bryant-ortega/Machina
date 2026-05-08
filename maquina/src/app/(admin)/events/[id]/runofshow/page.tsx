@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { EmailRunOfShowButton } from './email-button'
 import { notFound } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
@@ -128,12 +129,15 @@ export default async function RunOfShowPage({
               {event.event_id}
             </p>
           </div>
-          <a
-            href={`/api/pdf?view=runofshow&eventId=${id}`}
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            Export PDF
-          </a>
+          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-start">
+            <a
+              href={`/api/pdf?view=runofshow&eventId=${id}`}
+              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              Export PDF
+            </a>
+            <EmailRunOfShowButton eventId={id} />
+          </div>
         </header>
 
         {(stages ?? []).length === 0 ? (
