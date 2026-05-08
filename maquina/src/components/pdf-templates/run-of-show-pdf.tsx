@@ -18,8 +18,9 @@ import {
   View,
   Text,
   Image,
+  StyleSheet,
 } from '@react-pdf/renderer'
-import { styles } from './styles'
+import { styles, COLORS } from './styles'
 import {
   LOGO_LOSGOTHS_TRIANGLE,
   LOGO_LOSGOTHS_WORDMARK,
@@ -44,6 +45,72 @@ export type RunOfShowPDFProps = {
   /** ISO timestamp of when the PDF was generated, for the footer. */
   generatedAt: string
 }
+
+// ---------------------------------------------------------------------------
+// Run-of-show body text is scaled 1.5× from the shared baseline so it
+// reads cleanly on phones (the deliverable for DJs / venue staff —
+// they pull this up on a phone screen). Brand band + page footer keep
+// their original sizes — they're chrome, not content.
+//
+// Anything used for body content below references rosStyles instead
+// of the shared styles. Layout (paddings, widths) is unchanged so
+// pagination still works on Letter.
+// ---------------------------------------------------------------------------
+const ROS_SCALE = 1.5
+const ROS_BODY = 10 * ROS_SCALE
+const rosStyles = StyleSheet.create({
+  page: {
+    ...styles.page,
+    fontSize: ROS_BODY,
+  },
+  title: {
+    ...styles.title,
+    fontSize: 20 * ROS_SCALE,
+  },
+  subtitle: {
+    ...styles.subtitle,
+    fontSize: 10 * ROS_SCALE,
+  },
+  sectionTitle: {
+    ...styles.sectionTitle,
+    fontSize: 11 * ROS_SCALE,
+  },
+  tableHead: {
+    ...styles.tableHead,
+    fontSize: 8 * ROS_SCALE,
+  },
+  tableCell: {
+    ...styles.tableCell,
+    fontSize: 10 * ROS_SCALE,
+  },
+  tableCellMuted: {
+    ...styles.tableCellMuted,
+    fontSize: 10 * ROS_SCALE,
+  },
+  monoCell: {
+    ...styles.monoCell,
+    fontSize: 9 * ROS_SCALE,
+  },
+  doorsCellTime: {
+    ...styles.doorsCellTime,
+    fontSize: 10 * ROS_SCALE,
+  },
+  doorsCellLabel: {
+    ...styles.doorsCellLabel,
+    fontSize: 10 * ROS_SCALE,
+  },
+  smallMuted: {
+    ...styles.smallMuted,
+    fontSize: 9 * ROS_SCALE,
+  },
+})
+// Silence "COLORS imported but unused" if rosStyles ends up not
+// referencing it directly — keep the import for future tweaks.
+void COLORS
+
+// Wider time column — 1.5× text needs more horizontal room before it
+// wraps in the schedule's two-column tables.
+const TIME_COL_WIDTH = 90 * ROS_SCALE
 
 // Brand band sizing. Skull triangle is ~square; wordmark is wide.
 const TRIANGLE_HEIGHT = 32
@@ -76,7 +143,7 @@ export function RunOfShowPDF({
       author="LosGothsCo"
       creator="Maquina"
     >
-      <Page size="LETTER" style={styles.page}>
+      <Page size="LETTER" style={rosStyles.page}>
         {/* Brand band — skull triangle + wordmark on left, page caption on right. */}
         <View style={styles.brandRow}>
           <View
@@ -115,30 +182,30 @@ export function RunOfShowPDF({
               </View>
             )
           }
-          return <Text style={styles.title}>{event.title}</Text>
+          return <Text style={rosStyles.title}>{event.title}</Text>
         })()}
-        <Text style={styles.subtitle}>
+        <Text style={rosStyles.subtitle}>
           {formatDate(event.date)} · {event.city}, {event.state}
         </Text>
-        <Text style={[styles.subtitle, { marginBottom: 16 }]}>
+        <Text style={[rosStyles.subtitle, { marginBottom: 16 }]}>
           Doors {event.doorsLabel} · End {event.endLabel}
         </Text>
 
         {/* Per-stage schedules */}
         {stages.length === 0 ? (
-          <Text style={styles.smallMuted}>No stages on this event.</Text>
+          <Text style={rosStyles.smallMuted}>No stages on this event.</Text>
         ) : (
           stages.map((stage) => (
             <View key={`stage-${stage.stageNumber}`} wrap={false}>
-              <Text style={styles.sectionTitle}>
+              <Text style={rosStyles.sectionTitle}>
                 Stage {stage.stageNumber} · {stage.stageName}
               </Text>
               <View style={styles.sectionRule} />
 
               {/* Header row */}
               <View style={styles.tableHeadRow}>
-                <Text style={[styles.tableHead, { width: 90 }]}>Time</Text>
-                <Text style={[styles.tableHead, { flex: 1 }]}>Slot</Text>
+                <Text style={[rosStyles.tableHead, { width: TIME_COL_WIDTH }]}>Time</Text>
+                <Text style={[rosStyles.tableHead, { flex: 1 }]}>Slot</Text>
               </View>
 
               {stage.rows.map((row, idx) => {
@@ -149,10 +216,10 @@ export function RunOfShowPDF({
                       key={`row-${stage.stageNumber}-${idx}`}
                       style={styles.doorsRow}
                     >
-                      <Text style={[styles.doorsCellTime, { width: 90 }]}>
+                      <Text style={[rosStyles.doorsCellTime, { width: TIME_COL_WIDTH }]}>
                         {row.time}
                       </Text>
-                      <Text style={[styles.doorsCellLabel, { flex: 1 }]}>
+                      <Text style={[rosStyles.doorsCellLabel, { flex: 1 }]}>
                         {row.label}
                       </Text>
                     </View>
@@ -163,12 +230,12 @@ export function RunOfShowPDF({
                     key={`row-${stage.stageNumber}-${idx}`}
                     style={styles.tableRow}
                   >
-                    <Text style={[styles.monoCell, { width: 90 }]}>
+                    <Text style={[rosStyles.monoCell, { width: TIME_COL_WIDTH }]}>
                       {row.time}
                     </Text>
                     <Text
                       style={[
-                        row.kind === 'dj' ? styles.tableCell : styles.tableCellMuted,
+                        row.kind === 'dj' ? rosStyles.tableCell : rosStyles.tableCellMuted,
                         { flex: 1 },
                       ]}
                     >
