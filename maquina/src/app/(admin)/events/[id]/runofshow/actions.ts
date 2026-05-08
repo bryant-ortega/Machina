@@ -21,8 +21,11 @@ import { renderRunOfShowPdf } from '@/lib/pdf-runofshow'
  *
  * Env required:
  *   RESEND_API_KEY     — Resend API key
- *   RESEND_FROM        — verified sender, e.g. "Run of Show <runofshow@losgoths.co>"
- *                        Falls back to "onboarding@resend.dev" for testing.
+ *   RESEND_FROM        — verified sender override.
+ *                        Defaults to "Maquina <maquina@losgoths.co>"; the
+ *                        losgoths.co domain must be verified in Resend
+ *                        (DKIM + SPF + return-path) for sends to land in
+ *                        inboxes rather than spam.
  */
 
 const Input = z.object({ event_id: z.string().uuid() })
@@ -153,7 +156,7 @@ export async function sendRunOfShowEmail(
   // 6. Send. One email per recipient — preserves privacy, and lets
   //    bounces fail in isolation.
   const resend = new Resend(apiKey)
-  const from = process.env.RESEND_FROM ?? 'Run of Show <onboarding@resend.dev>'
+  const from = process.env.RESEND_FROM ?? 'Maquina <maquina@losgoths.co>'
   const attachmentBase64 = pdf.buffer.toString('base64')
   const attachments = [
     {
