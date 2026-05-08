@@ -24,3 +24,35 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * Native <input type="date"> calendar icon styling.
+ *
+ * WebKit/Chromium browsers render a small calendar glyph at the right
+ * edge of date inputs via the ::-webkit-calendar-picker-indicator
+ * pseudo-element. Default colour is dark grey, which disappears
+ * against the dark zinc-950 input backgrounds we use in admin forms.
+ *
+ * The trick: invert the indicator's pixels in dark mode so the dark
+ * glyph becomes white on dark, while staying dark in light mode.
+ */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+@media (prefers-color-scheme: dark) {
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="week"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.85;
+  }
+}
+
