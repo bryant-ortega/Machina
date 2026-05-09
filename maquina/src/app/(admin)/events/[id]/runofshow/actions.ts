@@ -148,21 +148,18 @@ export async function sendRunOfShowEmail(
   const subject = `${parsed.data.test_to ? '[TEST] ' : ''}Run of Show — ${pdf.title} · ${dateLong}`
   const where = `${pdf.city}${pdf.state ? `, ${pdf.state}` : ''}`
   const text = [
-    `Run of Show attached for ${pdf.title}.`,
+    `¡Saludos! Run of Show attached for ${pdf.title}.`,
+    `When: ${dateLong} Where: ${where}`,
     ``,
-    `When: ${dateLong}`,
-    `Where: ${where}`,
+    `Gracias!`,
     ``,
-    `Reply if anything looks off.`,
-    ``,
-    `— LosGothsCo`,
+    `— Maquina`,
   ].join('\n')
   const html = [
-    `<p>Run of Show attached for <strong>${escapeHtml(pdf.title)}</strong>.</p>`,
-    `<p><strong>When:</strong> ${escapeHtml(dateLong)}<br>`,
-    `<strong>Where:</strong> ${escapeHtml(where)}</p>`,
-    `<p>Reply if anything looks off.</p>`,
-    `<p>— LosGothsCo</p>`,
+    `<p>¡Saludos! Run of Show attached for <strong>${escapeHtml(pdf.title)}</strong>.</p>`,
+    `<p><strong>When:</strong> ${escapeHtml(dateLong)} <strong>Where:</strong> ${escapeHtml(where)}</p>`,
+    `<p>Gracias!</p>`,
+    `<p>— Maquina</p>`,
   ].join('\n')
 
   // 6. Send. One email per recipient — preserves privacy, and lets
