@@ -28,7 +28,15 @@ import { renderRunOfShowPdf } from '@/lib/pdf-runofshow'
  *                        inboxes rather than spam.
  */
 
-const Input = z.object({ event_id: z.string().uuid() })
+const Input = z.object({
+  event_id: z.string().uuid(),
+  /**
+   * If provided, the email is sent ONLY to this address — bypasses the
+   * lineup / advance-contact / admin recipient gathering. Useful for
+   * sanity-checking a brand-new event's PDF render before broadcasting.
+   */
+  test_to: z.string().email().optional(),
+})
 
 export type SendRosResult =
   | {
@@ -51,7 +59,7 @@ export type SendRosResult =
     }
 
 export async function sendRunOfShowEmail(
-  input: { event_id: string }
+  input: { event_id: string; test_to?: string }
 ): Promise<SendRosResult> {
   const parsed = Input.safeParse(input)
   if (!parsed.success) {
@@ -84,26 +92,8 @@ export async function sendRunOfShowEmail(
   })
   if (!pdf.ok) return { ok: false, reason: 'not_found' }
 
-  // 4. Recipient assembly.
-  const { data: ev } = await supabase
-    .from('events')
-    .select('advance_contact_email')
-    .eq('id', parsed.data.event_id)
-    .maybeSingle()
-
-  const { data: djSlots } = await supabase
-    .from('event_dj_slots')
-    .select('djs(email, dj_name)')
-    .eq('event_id', parsed.data.event_id)
-
-  type DjRow = { email: string | null; dj_name: string | null } | null
-  const djRows: DjRow[] = (djSlots ?? []).map((s) => {
-    // PostgREST returns djs as object or array depending on join type.
-    const d = (s as { djs: DjRow | DjRow[] }).djs
-    if (Array.isArray(d)) return d[0] ?? null
-    return d ?? null
-  })
-
+  // 4. Recipient assembly. Test-mode short-circuits to a single
+  //    address; production mode unions admin + DJs + advance contact.
   type Recipient = { email: string; label: string }
   const recipients = new Map<string, Recipient>() // key = lowercased email
 
@@ -115,12 +105,34 @@ export async function sendRunOfShowEmail(
     recipients.set(norm, { email: email.trim(), label })
   }
 
-  add(user.email ?? null, 'You (admin copy)')
-  for (const d of djRows) {
-    if (!d?.email) continue
-    add(d.email, `DJ: ${d.dj_name ?? 'Unknown'}`)
+  if (parsed.data.test_to) {
+    add(parsed.data.test_to, 'Test recipient')
+  } else {
+    const { data: ev } = await supabase
+      .from('events')
+      .select('advance_contact_email')
+      .eq('id', parsed.data.event_id)
+      .maybeSingle()
+
+    const { data: djSlots } = await supabase
+      .from('event_dj_slots')
+      .select('djs(email, dj_name)')
+      .eq('event_id', parsed.data.event_id)
+
+    type DjRow = { email: string | null; dj_name: string | null } | null
+    const djRows: DjRow[] = (djSlots ?? []).map((s) => {
+      const d = (s as { djs: DjRow | DjRow[] }).djs
+      if (Array.isArray(d)) return d[0] ?? null
+      return d ?? null
+    })
+
+    add(user.email ?? null, 'You (admin copy)')
+    for (const d of djRows) {
+      if (!d?.email) continue
+      add(d.email, `DJ: ${d.dj_name ?? 'Unknown'}`)
+    }
+    add(ev?.advance_contact_email ?? null, 'Advance contact')
   }
-  add(ev?.advance_contact_email ?? null, 'Advance contact')
 
   if (recipients.size === 0) {
     return { ok: false, reason: 'no_recipients' }
@@ -133,7 +145,7 @@ export async function sendRunOfShowEmail(
     day: 'numeric',
     year: 'numeric',
   })
-  const subject = `Run of Show — ${pdf.title} · ${dateLong}`
+  const subject = `${parsed.data.test_to ? '[TEST] ' : ''}Run of Show — ${pdf.title} · ${dateLong}`
   const where = `${pdf.city}${pdf.state ? `, ${pdf.state}` : ''}`
   const text = [
     `Run of Show attached for ${pdf.title}.`,
