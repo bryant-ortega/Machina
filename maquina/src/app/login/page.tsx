@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -56,10 +57,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="w-full max-w-sm space-y-6 rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="flex flex-1 items-center justify-center gap-8 px-6 py-16">
+      <div className="grid w-full max-w-5xl grid-cols-1 items-center gap-8 sm:grid-cols-2">
+        {/* Maquina — transparent PNG/WebP, sits directly on the page background */}
+        <div className="relative mx-auto aspect-[900/1329] w-full max-w-md">
+          <Image
+            src="/brand/goth-makima.webp"
+            alt="Maquina"
+            fill
+            priority
+            sizes="(min-width: 640px) 50vw, 100vw"
+            className="object-contain"
+          />
+        </div>
+
+        <div className="w-full max-w-sm space-y-6 justify-self-center sm:justify-self-start">
         <div className="space-y-1.5">
-          <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
+          <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+            Los Goths Co · Maquina
+          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Enter your email and password.
           </p>
@@ -133,6 +150,7 @@ export default function LoginPage() {
             </Link>
           </div>
         </form>
+        </div>
       </div>
     </div>
   )
