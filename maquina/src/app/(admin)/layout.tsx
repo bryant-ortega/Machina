@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
@@ -91,11 +92,21 @@ export default async function AdminLayout({
 
       {/* Desktop sidebar — hidden on mobile. */}
       <aside className="hidden w-60 flex-col border-r border-zinc-200 bg-white md:flex dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-          <p className="text-sm font-semibold tracking-tight">Maquina</p>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            LosGothsCo Enterprise
-          </p>
+        <div className="flex items-center gap-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+          <Image
+            src="/brand/maquina-cropped-face.webp"
+            alt=""
+            width={40}
+            height={40}
+            priority
+            className="h-10 w-10 shrink-0 rounded-full object-cover"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold tracking-tight">Maquina</p>
+            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+              LosGothsCo Enterprise
+            </p>
+          </div>
         </div>
         {sidebarBody}
       </aside>
