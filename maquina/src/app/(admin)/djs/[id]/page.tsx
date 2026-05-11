@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { EditDjForm } from './edit-form'
 import { W9DownloadButton } from './w9-download'
+import { W9UploadButton } from './w9-upload'
 
 /**
  * Admin DJ profile. Editable form for every field on the djs row, plus a
@@ -108,14 +109,20 @@ export default async function AdminDjProfilePage({
           </div>
 
           {dj.w9_status === 'on_file' && dj.w9_storage_path ? (
-            <W9DownloadButton
-              storagePath={dj.w9_storage_path}
-              fileName="Download W-9"
-            />
+            <div className="flex flex-col items-end gap-2">
+              <W9DownloadButton
+                storagePath={dj.w9_storage_path}
+                fileName="Download W-9"
+              />
+              <W9UploadButton djId={dj.id} variant="replace" />
+            </div>
           ) : (
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
-              ⚠ W-9 pending
-            </span>
+            <div className="flex flex-col items-end gap-2">
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                ⚠ W-9 pending
+              </span>
+              <W9UploadButton djId={dj.id} variant="upload" />
+            </div>
           )}
         </header>
 

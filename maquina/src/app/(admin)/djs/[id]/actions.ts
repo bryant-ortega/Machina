@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { createClient } from '@supabase/supabase-js'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 /**
@@ -127,5 +128,117 @@ export async function updateDj(formData: FormData): Promise<UpdateDjResult> {
 
   revalidatePath('/djs')
   revalidatePath(`/djs/${id}`)
+  return { ok: true }
+}
+
+/**
+ * Admin uploads a W-9 PDF on behalf of a DJ.
+ *
+ * Mirrors src/app/dj/upload-w9/actions.ts but the target DJ is identified
+ * by `dj_id` rather than the caller's session, and the storage path uses
+ * the DJ's `user_id` (not the admin's) so it matches the existing scheme:
+ *   w9s/{dj_user_id}/w9.pdf
+ *
+ * Authorization layers (same as updateDj above):
+ *   1. (admin) layout gates the page on role === 'admin'
+ *   2. This action re-checks role on the server
+ *   3. Service-role client bypasses RLS for the storage write; we manually
+ *      enforce the user_id invariant by looking it up from the dj row.
+ */
+
+const MAX_W9_BYTES = 10 * 1024 * 1024 // 10 MB — matches dj-side limit
+
+export type UploadDjW9Result =
+  | { ok: true }
+  | { ok: false; reason: 'unauth' }
+  | { ok: false; reason: 'forbidden' }
+  | { ok: false; reason: 'invalid_id' }
+  | { ok: false; reason: 'no_dj_row' }
+  | { ok: false; reason: 'no_user_id'; message: string }
+  | { ok: false; reason: 'no_file' }
+  | { ok: false; reason: 'wrong_type' }
+  | { ok: false; reason: 'too_large' }
+  | { ok: false; reason: 'storage_failed'; message: string }
+  | { ok: false; reason: 'db_failed'; message: string }
+
+export async function uploadDjW9(
+  formData: FormData
+): Promise<UploadDjW9Result> {
+  const supabase = await createServerSupabaseClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, reason: 'unauth' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (profile?.role !== 'admin') return { ok: false, reason: 'forbidden' }
+
+  const djId = formData.get('dj_id')
+  if (typeof djId !== 'string' || !UUID_LIKE.test(djId)) {
+    return { ok: false, reason: 'invalid_id' }
+  }
+
+  // Look up the DJ's user_id — this is what the storage path keys off,
+  // and the only authoritative source is the djs row itself.
+  const { data: dj } = await supabase
+    .from('djs')
+    .select('user_id')
+    .eq('id', djId)
+    .maybeSingle()
+  if (!dj) return { ok: false, reason: 'no_dj_row' }
+  if (!dj.user_id) {
+    return {
+      ok: false,
+      reason: 'no_user_id',
+      message:
+        'This DJ has no linked auth user yet. Have them finish registration before uploading a W-9 for them.',
+    }
+  }
+
+  const file = formData.get('w9') as File | null
+  if (!file || file.size === 0) return { ok: false, reason: 'no_file' }
+
+  const isPdfMime = file.type === 'application/pdf'
+  const isPdfName = file.name.toLowerCase().endsWith('.pdf')
+  if (!isPdfMime || !isPdfName) return { ok: false, reason: 'wrong_type' }
+
+  if (file.size > MAX_W9_BYTES) return { ok: false, reason: 'too_large' }
+
+  const path = `${dj.user_id}/w9.pdf`
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  const arrayBuffer = await file.arrayBuffer()
+  const { error: uploadError } = await admin.storage
+    .from('w9s')
+    .upload(path, arrayBuffer, {
+      contentType: 'application/pdf',
+      upsert: true, // re-uploads replace prior W-9 in place
+    })
+
+  if (uploadError) {
+    return { ok: false, reason: 'storage_failed', message: uploadError.message }
+  }
+
+  const { error: updateError } = await admin
+    .from('djs')
+    .update({ w9_storage_path: path, w9_status: 'on_file' })
+    .eq('id', djId)
+
+  if (updateError) {
+    return { ok: false, reason: 'db_failed', message: updateError.message }
+  }
+
+  revalidatePath('/djs')
+  revalidatePath(`/djs/${djId}`)
   return { ok: true }
 }
