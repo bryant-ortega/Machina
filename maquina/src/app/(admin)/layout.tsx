@@ -48,7 +48,20 @@ export default async function AdminLayout({
   // mobile drawer so nav stays in one place.
   const sidebarBody = (
     <>
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      {/* Maquina face — sits above the nav on both desktop and mobile.
+          Smaller on mobile so all nav items + signout stay visible. */}
+      <div className="border-b border-zinc-200 px-5 py-3 md:py-4 dark:border-zinc-800">
+        <Image
+          src="/brand/maquina-cropped-face.webp"
+          alt="Maquina"
+          width={180}
+          height={290}
+          priority
+          className="mx-auto h-auto w-full max-w-[110px] object-contain md:max-w-[160px]"
+        />
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         <NavLink href="/events">Events</NavLink>
         <NavLink href="/views">Views</NavLink>
         <NavLink href="/views/month">Month view</NavLink>
@@ -80,13 +93,19 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen flex-1 flex-col bg-zinc-50 md:flex-row dark:bg-zinc-950">
-      {/* Mobile top bar — hamburger + brand. Hidden on md+. */}
+      {/* Mobile top bar — hamburger + logo + brand. Hidden on md+. */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur md:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="flex items-center gap-3">
           <MobileNavTrigger />
-          <div>
-            <p className="text-sm font-semibold tracking-tight">Maquina</p>
-          </div>
+          <Image
+            src="/brand/losgoths-skull-triangle-transparent.png"
+            alt=""
+            width={28}
+            height={28}
+            priority
+            className="h-7 w-7 shrink-0 object-contain"
+          />
+          <p className="text-sm font-semibold tracking-tight">Maquina</p>
         </div>
       </header>
 
@@ -101,22 +120,7 @@ export default async function AdminLayout({
             priority
             className="h-10 w-10 shrink-0 object-contain"
           />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold tracking-tight">Maquina</p>
-            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-              LosGothsCo Enterprise
-            </p>
-          </div>
-        </div>
-        <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-          <Image
-            src="/brand/maquina-cropped-face.webp"
-            alt="Maquina"
-            width={180}
-            height={180}
-            priority
-            className="mx-auto h-auto w-full max-w-[160px] object-contain"
-          />
+          <p className="text-sm font-semibold tracking-tight">Maquina</p>
         </div>
         {sidebarBody}
       </aside>
