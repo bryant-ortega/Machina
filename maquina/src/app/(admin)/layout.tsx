@@ -94,12 +94,12 @@ export default async function AdminLayout({
       <aside className="hidden w-60 flex-col border-r border-zinc-200 bg-white md:flex dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-center gap-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
           <Image
-            src="/brand/maquina-cropped-face.webp"
+            src="/brand/losgoths-skull-triangle-transparent.png"
             alt=""
             width={40}
             height={40}
             priority
-            className="h-10 w-10 shrink-0 rounded-full object-cover"
+            className="h-10 w-10 shrink-0 object-contain"
           />
           <div className="min-w-0">
             <p className="text-sm font-semibold tracking-tight">Maquina</p>
@@ -107,6 +107,16 @@ export default async function AdminLayout({
               LosGothsCo Enterprise
             </p>
           </div>
+        </div>
+        <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+          <Image
+            src="/brand/maquina-cropped-face.webp"
+            alt="Maquina"
+            width={180}
+            height={180}
+            priority
+            className="mx-auto h-auto w-full max-w-[160px] object-contain"
+          />
         </div>
         {sidebarBody}
       </aside>
