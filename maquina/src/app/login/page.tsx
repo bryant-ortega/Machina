@@ -43,9 +43,11 @@ export default function LoginPage() {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
-    const fd = new FormData()
-    fd.set('email', email)
-    fd.set('password', password)
+    // Read directly from the form so browser autofill works even when
+    // the autofill event doesn't fire React's onChange (common on mobile
+    // password managers). The controlled state is still kept in sync for
+    // the visible value, but it's not what we submit.
+    const fd = new FormData(event.currentTarget)
     startTransition(async () => {
       const result = await loginUser(fd)
       // If we got a result back, the action returned an error (success
@@ -92,6 +94,7 @@ export default function LoginPage() {
             </label>
             <input
               id="email"
+              name="email"
               type="email"
               inputMode="email"
               autoComplete="email"
@@ -113,6 +116,7 @@ export default function LoginPage() {
             </label>
             <input
               id="password"
+              name="password"
               type="password"
               autoComplete="current-password"
               required
@@ -129,7 +133,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={pending || !email || !password}
+            disabled={pending}
             className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
           >
             {pending ? 'Signing in…' : 'Sign in'}
