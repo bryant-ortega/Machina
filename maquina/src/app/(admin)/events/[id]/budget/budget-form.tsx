@@ -51,6 +51,8 @@ import { updateBudget, type UpdateBudgetResult } from './actions'
 // Types
 // ---------------------------------------------------------------------------
 
+type PaymentStatus = 'unpaid' | 'partial' | 'paid'
+
 type ExpenseRow = {
   /** Stable React key. NOT the DB id. */
   uid: string
@@ -60,6 +62,13 @@ type ExpenseRow = {
   item: string
   qty: string
   price: string
+  /**
+   * Payment tracking — only editable on the Final budget. Estimated rows
+   * carry these fields too so the UI / payload shape stays uniform; they
+   * just default to 'unpaid' / '' and aren't rendered.
+   */
+  payment_status: PaymentStatus
+  payment_method: string
 }
 
 type TierRow = {
@@ -76,6 +85,12 @@ export type BudgetFormProps = {
     split_pct: number
     bar_included: boolean
   }
+  /**
+   * True when editing the actualized (final) budget. The Paid status +
+   * payment method controls only render in this mode — estimated rows
+   * shouldn't be tracking payment state.
+   */
+  isFinal: boolean
   budget: {
     id: string
     drop_off: number
@@ -96,6 +111,8 @@ export type BudgetFormProps = {
     item: string
     qty: string
     price: string
+    payment_status: PaymentStatus
+    payment_method: string
   }>
   initialTiers: Array<{
     id: string
@@ -111,6 +128,7 @@ export type BudgetFormProps = {
 
 export function BudgetForm({
   event,
+  isFinal,
   budget,
   initialExpenses,
   initialTiers,
@@ -129,6 +147,8 @@ export function BudgetForm({
       item: e.item,
       qty: e.qty,
       price: e.price,
+      payment_status: e.payment_status,
+      payment_method: e.payment_method,
     }))
   )
 
@@ -233,6 +253,22 @@ export function BudgetForm({
     return total
   }
 
+  /**
+   * Final-only: how much of a category has actually been paid out.
+   * 'paid' counts the full line; 'partial' counts half (rough proxy
+   * — the form doesn't track a partial $ amount yet); 'unpaid' is 0.
+   */
+  function categoryPaid(cat: ExpenseCategory): number {
+    let paid = 0
+    for (const e of expenses) {
+      if (e.category !== cat) continue
+      const line = (Number(e.qty) || 0) * (Number(e.price) || 0)
+      if (e.payment_status === 'paid') paid += line
+      else if (e.payment_status === 'partial') paid += line * 0.5
+    }
+    return paid
+  }
+
   // ------------------------------------------------------------- Mutations
 
   function updateExpense(uid: string, patch: Partial<ExpenseRow>) {
@@ -251,6 +287,8 @@ export function BudgetForm({
         item: '',
         qty: '1',
         price: '0',
+        payment_status: 'unpaid',
+        payment_method: '',
       },
     ])
   }
@@ -324,6 +362,8 @@ export function BudgetForm({
         item: ex.item.trim(),
         qty: Number(ex.qty) || 0,
         price: Number(ex.price) || 0,
+        payment_status: ex.payment_status,
+        payment_method: ex.payment_method.trim(),
       })),
       tiers: tiers.map((t) => ({
         id: t.id || '',
@@ -411,6 +451,11 @@ export function BudgetForm({
                     {EXPENSE_CATEGORY_LABELS[cat]}
                   </h3>
                   <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                    {isFinal && categorySubtotal(cat) > 0 ? (
+                      <>
+                        {formatUSDCents(categoryPaid(cat))} paid /{' '}
+                      </>
+                    ) : null}
                     {formatUSDCents(categorySubtotal(cat))}
                   </span>
                 </div>
@@ -424,9 +469,19 @@ export function BudgetForm({
                     <thead className="text-left text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                       <tr className="border-b border-zinc-100 dark:border-zinc-900">
                         <th className="px-4 py-2 font-medium">Item</th>
-                        <th className="w-24 px-4 py-2 font-medium">Qty</th>
-                        <th className="w-32 px-4 py-2 font-medium">Price</th>
-                        <th className="w-32 px-4 py-2 text-right font-medium">
+                        <th className="w-20 px-4 py-2 font-medium">Qty</th>
+                        <th className="w-28 px-4 py-2 font-medium">Price</th>
+                        {isFinal && (
+                          <>
+                            <th className="w-28 px-4 py-2 font-medium">
+                              Paid
+                            </th>
+                            <th className="w-40 px-4 py-2 font-medium">
+                              Method
+                            </th>
+                          </>
+                        )}
+                        <th className="w-28 px-4 py-2 text-right font-medium">
                           Total
                         </th>
                         <th className="w-10 px-2 py-2"></th>
@@ -439,6 +494,7 @@ export function BudgetForm({
                         const idx = expenses.findIndex(
                           (e) => e.uid === row.uid
                         )
+                        const methodDisabled = row.payment_status === 'unpaid'
                         return (
                           <tr key={row.uid}>
                             <td className="px-4 py-2">
@@ -489,6 +545,59 @@ export function BudgetForm({
                                 )}
                               />
                             </td>
+                            {isFinal && (
+                              <>
+                                <td className="px-4 py-2">
+                                  <select
+                                    value={row.payment_status}
+                                    onChange={(e) => {
+                                      const next = e.target
+                                        .value as PaymentStatus
+                                      // Clear method when flipping back to
+                                      // unpaid so we don't carry a stale value.
+                                      updateExpense(row.uid, {
+                                        payment_status: next,
+                                        ...(next === 'unpaid'
+                                          ? { payment_method: '' }
+                                          : {}),
+                                      })
+                                    }}
+                                    className={selectClass(
+                                      fieldErrors[
+                                        `expenses.${idx}.payment_status`
+                                      ],
+                                      row.payment_status
+                                    )}
+                                  >
+                                    <option value="unpaid">Unpaid</option>
+                                    <option value="partial">Partial</option>
+                                    <option value="paid">Paid</option>
+                                  </select>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <input
+                                    value={row.payment_method}
+                                    onChange={(e) =>
+                                      updateExpense(row.uid, {
+                                        payment_method: e.target.value,
+                                      })
+                                    }
+                                    disabled={methodDisabled}
+                                    placeholder={
+                                      methodDisabled
+                                        ? '—'
+                                        : 'Zelle, cash, check #…'
+                                    }
+                                    maxLength={80}
+                                    className={inputClass(
+                                      fieldErrors[
+                                        `expenses.${idx}.payment_method`
+                                      ]
+                                    )}
+                                  />
+                                </td>
+                              </>
+                            )}
                             <td className="px-4 py-2 text-right text-zinc-700 tabular-nums dark:text-zinc-300">
                               {formatUSDCents(lineTotal)}
                             </td>
@@ -1021,11 +1130,23 @@ function MerchLine({ label, value }: { label: string; value: string }) {
 
 function inputClass(err?: string): string {
   return [
-    'rounded-md border bg-white px-2 py-1 text-sm text-zinc-900 shadow-sm outline-none focus:ring-1 dark:bg-zinc-900 dark:text-zinc-100',
+    'rounded-md border bg-white px-2 py-1 text-sm text-zinc-900 shadow-sm outline-none focus:ring-1 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 dark:bg-zinc-900 dark:text-zinc-100 dark:disabled:bg-zinc-900/50 dark:disabled:text-zinc-600',
     err
       ? 'border-red-400 focus:border-red-500 focus:ring-red-300 dark:border-red-700 dark:focus:border-red-500 dark:focus:ring-red-700'
       : 'border-zinc-300 focus:border-zinc-500 focus:ring-zinc-300 dark:border-zinc-700 dark:focus:border-zinc-500 dark:focus:ring-zinc-700',
   ].join(' ')
+}
+
+/** Same look as inputClass + a colored left accent based on the status. */
+function selectClass(err: string | undefined, status: PaymentStatus): string {
+  const base = inputClass(err)
+  const tone =
+    status === 'paid'
+      ? 'border-l-4 border-l-emerald-500 dark:border-l-emerald-400'
+      : status === 'partial'
+        ? 'border-l-4 border-l-amber-500 dark:border-l-amber-400'
+        : 'border-l-4 border-l-zinc-300 dark:border-l-zinc-700'
+  return `${base} ${tone}`
 }
 
 /** Anything not in the known list lands in 'staff' as a safe default. */

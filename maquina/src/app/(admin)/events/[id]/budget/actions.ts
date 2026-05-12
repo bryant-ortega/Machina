@@ -53,6 +53,20 @@ const ExpenseInput = z.object({
     (v) => (v === '' || v === null || v === undefined ? 0 : Number(v)),
     z.number().min(0, 'Price must be ≥ 0')
   ),
+  // Phase 18 — Paid + payment method. Editable on the FINAL budget only;
+  // the form sends defaults ('unpaid' / null) on the estimated view so
+  // these always validate even when the controls aren't rendered.
+  payment_status: z.enum(['unpaid', 'partial', 'paid']).default('unpaid'),
+  // Freeform after migration 0011 dropped the CHECK constraint. Trim and
+  // normalize empty strings to null so we don't store '   ' as a method.
+  payment_method: z.preprocess(
+    (v) => {
+      if (v === null || v === undefined) return null
+      const s = String(v).trim()
+      return s === '' ? null : s
+    },
+    z.string().max(80).nullable()
+  ),
 })
 
 const TierInput = z.object({
@@ -258,6 +272,8 @@ export async function updateBudget(
           item: ex.item,
           qty: ex.qty,
           price: ex.price,
+          payment_status: ex.payment_status,
+          payment_method: ex.payment_method,
         })
         .eq('id', ex.id)
       if (uErr) {
@@ -273,6 +289,8 @@ export async function updateBudget(
           item: ex.item,
           qty: ex.qty,
           price: ex.price,
+          payment_status: ex.payment_status,
+          payment_method: ex.payment_method,
         })
       if (iErr) {
         return { ok: false, reason: 'db_failed', message: iErr.message }

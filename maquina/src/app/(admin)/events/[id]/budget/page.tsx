@@ -242,7 +242,9 @@ export default async function BudgetPage({
   const [{ data: expenses }, { data: tiers }] = await Promise.all([
     supabase
       .from('event_budget_expenses')
-      .select('id, category, item, qty, price')
+      .select(
+        'id, category, item, qty, price, payment_status, payment_method'
+      )
       .eq('budget_id', activeBudget.id)
       .order('category', { ascending: true })
       .order('item', { ascending: true }),
@@ -276,6 +278,7 @@ export default async function BudgetPage({
         <BudgetForm
           key={activeBudget.id}
           event={eventCommon}
+          isFinal={view === 'final'}
           budget={{
             id: activeBudget.id as string,
             drop_off: Number(activeBudget.drop_off ?? 0),
@@ -296,6 +299,9 @@ export default async function BudgetPage({
             item: e.item as string,
             qty: e.qty == null ? '0' : String(e.qty),
             price: e.price == null ? '0' : String(e.price),
+            payment_status: normalizePaymentStatus(e.payment_status),
+            payment_method:
+              e.payment_method == null ? '' : String(e.payment_method),
           }))}
           initialTiers={(tiers ?? []).map((t) => ({
             id: t.id as string,
@@ -307,4 +313,12 @@ export default async function BudgetPage({
       </div>
     </div>
   )
+}
+
+/** Defensive coerce — DB column allows only the three known values, but
+ *  TS sees it as `string`. Anything else falls back to 'unpaid'. */
+function normalizePaymentStatus(
+  raw: unknown
+): 'unpaid' | 'partial' | 'paid' {
+  return raw === 'paid' || raw === 'partial' ? raw : 'unpaid'
 }
