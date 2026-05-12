@@ -13,8 +13,8 @@ export default function DjRegisterPage() {
         <div className="space-y-1.5">
           <h1 className="text-xl font-semibold tracking-tight">Register as a DJ</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Get added to the LosGothsCo roster. We&apos;ll email a magic link
-            to confirm your account.
+            Create your account to get added to the LosGothsCo roster.
+            You&apos;ll upload your W-9 right after.
           </p>
         </div>
         <RegistrationForm />
