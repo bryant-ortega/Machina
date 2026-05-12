@@ -35,6 +35,8 @@ type FormValues = z.infer<typeof FormSchema>
 type ViewState =
   | { kind: 'idle' }
   | { kind: 'already_registered' }
+  | { kind: 'orphan_wrong_password' }
+  | { kind: 'orphan_wrong_role' }
   | { kind: 'error'; message: string }
 
 const REGIONS = [
@@ -74,6 +76,14 @@ export function RegistrationForm() {
         setView({ kind: 'already_registered' })
         return
       }
+      if (result.reason === 'orphan_wrong_password') {
+        setView({ kind: 'orphan_wrong_password' })
+        return
+      }
+      if (result.reason === 'orphan_wrong_role') {
+        setView({ kind: 'orphan_wrong_role' })
+        return
+      }
       if (result.reason === 'invalid') {
         for (const [field, msgs] of Object.entries(result.fieldErrors)) {
           if (msgs && msgs.length) {
@@ -100,6 +110,56 @@ export function RegistrationForm() {
         >
           Go to sign in
         </a>
+      </div>
+    )
+  }
+
+  if (view.kind === 'orphan_wrong_password') {
+    return (
+      <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+        <p>
+          An account already exists for this email, but the password you
+          entered doesn&apos;t match. You can:
+        </p>
+        <ul className="ml-5 list-disc space-y-1 text-xs">
+          <li>Re-submit the form with your existing password to reclaim the profile.</li>
+          <li>Reset your password if you don&apos;t remember it.</li>
+          <li>Use a different email address.</li>
+        </ul>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => setView({ kind: 'idle' })}
+            className="rounded-md bg-amber-900 px-3 py-1.5 text-xs font-medium text-amber-50 hover:bg-amber-800 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
+          >
+            Try again
+          </button>
+          <a
+            href="/forgot-password"
+            className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40"
+          >
+            Reset password
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  if (view.kind === 'orphan_wrong_role') {
+    return (
+      <div className="space-y-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+        <p>
+          This email is already registered with a different role and
+          can&apos;t be used to register as a DJ. Please use a different
+          email, or contact an admin if you think this is a mistake.
+        </p>
+        <button
+          type="button"
+          onClick={() => setView({ kind: 'idle' })}
+          className="rounded-md bg-red-900 px-3 py-1.5 text-xs font-medium text-red-50 hover:bg-red-800 dark:bg-red-200 dark:text-red-950 dark:hover:bg-red-100"
+        >
+          Use a different email
+        </button>
       </div>
     )
   }

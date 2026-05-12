@@ -54,6 +54,8 @@ export type RegisterDjResult =
   | { ok: false; reason: 'invalid'; fieldErrors: Record<string, string[]> }
   | { ok: false; reason: 'already_registered' }
   | { ok: false; reason: 'create_failed'; message: string }
+  | { ok: false; reason: 'orphan_wrong_password' }
+  | { ok: false; reason: 'orphan_wrong_role' }
 // On success the action redirects, so the form never sees an `ok: true`.
 
 export async function registerDj(
@@ -113,7 +115,16 @@ export async function registerDj(
         display_name: input.dj_name,
       },
     })
+
   if (createErr || !created.user) {
+    // Recovery branch: an auth user with this email exists but there's no
+    // djs row (we already checked above). This happens when a DJ profile
+    // was deleted but the orphaned auth user wasn't cleaned up. Try to
+    // reclaim the account by signing in with the password they just typed.
+    if (isEmailExistsError(createErr)) {
+      return await reclaimOrphanAccount(input)
+    }
+
     return {
       ok: false,
       reason: 'create_failed',
@@ -158,6 +169,85 @@ export async function registerDj(
     // Account is created — fall back to the login page rather than
     // surfacing this as a failure.
     redirect('/login')
+  }
+
+  redirect('/dj/upload-w9')
+}
+
+/**
+ * True iff the createUser error indicates the email is already on file.
+ * Supabase returns slightly different shapes across versions, so we check
+ * the structured code, the HTTP status, and the message text as a fallback.
+ */
+function isEmailExistsError(err: { code?: string; status?: number; message?: string } | null): boolean {
+  if (!err) return false
+  if (err.code === 'email_exists' || err.code === 'user_already_exists') return true
+  if (err.status === 422) return true
+  const m = (err.message ?? '').toLowerCase()
+  return m.includes('already') && (m.includes('registered') || m.includes('exists'))
+}
+
+type RegisterDjInputT = z.infer<typeof RegisterDjInput>
+
+/**
+ * Recovery flow when an auth user already exists for this email but no
+ * djs row does. We try to sign in with the password the user just typed
+ * — if that works, they own the account and we can safely insert the
+ * missing djs row.
+ *
+ * Refuses if:
+ *   - Password doesn't match (could be a different person trying to claim)
+ *   - The auth user's profile role is anything other than 'dj' (would
+ *     overwrite an admin/partner account)
+ */
+async function reclaimOrphanAccount(
+  input: RegisterDjInputT
+): Promise<RegisterDjResult | never> {
+  const supabase = await createServerSupabaseClient()
+  const { data: signed, error: signInErr } =
+    await supabase.auth.signInWithPassword({
+      email: input.email,
+      password: input.password,
+    })
+
+  if (signInErr || !signed.user) {
+    return { ok: false, reason: 'orphan_wrong_password' }
+  }
+
+  // Use the SSR client (now authenticated as the user) for the role check
+  // and the writes — keeps types simple and lets RLS act as a backstop.
+  // Make sure we're not about to attach DJ-shaped data to an admin/partner.
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', signed.user.id)
+    .maybeSingle()
+  if (existingProfile?.role && existingProfile.role !== 'dj') {
+    await supabase.auth.signOut()
+    return { ok: false, reason: 'orphan_wrong_role' }
+  }
+
+  // Bring profile back in line with the new DJ identity (display_name +
+  // role). The profile row was created by handle_new_user when the auth
+  // user was originally registered, so update (not insert).
+  await supabase
+    .from('profiles')
+    .update({ role: 'dj', display_name: input.dj_name })
+    .eq('user_id', signed.user.id)
+
+  // Insert the missing djs row.
+  const { error: djErr } = await supabase.from('djs').insert({
+    user_id: signed.user.id,
+    dj_name: input.dj_name,
+    government_name: input.government_name,
+    email: input.email,
+    phone: input.phone ?? null,
+    pay_method: input.pay_method ?? null,
+    pay_handle: input.pay_handle ?? null,
+    region: input.region,
+  })
+  if (djErr) {
+    return { ok: false, reason: 'create_failed', message: djErr.message }
   }
 
   redirect('/dj/upload-w9')
