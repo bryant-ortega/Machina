@@ -8,8 +8,9 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
  * platform.
  *
  * Sort order:
- *   1. Upcoming events ascending (next event first)
- *   2. Past events descending (most recent past first)
+ *   Strict ascending by date — soonest date first, latest date last.
+ *   Event status (draft/published/etc.) and past-vs-future have no
+ *   effect on order.
  *
  * Calendar/Month/Year views ship in Phase 8.
  *
@@ -49,22 +50,14 @@ export default async function EventsPage({
     venues: { name: string } | { name: string }[] | null
   }
 
-  // Upcoming-first sort. Today and forward sorted ascending; everything
-  // before today sorted descending. We compare ISO date strings directly,
-  // so the cutoff is a UTC-anchored "today".
-  const today = new Date().toISOString().slice(0, 10)
+  // Strict ascending by ISO date string — soonest first, latest last.
+  // Status and past/future have no effect on order.
   const events = ((rawEvents ?? []) as RawEvent[])
     .map((e) => ({
       ...e,
       venueName: Array.isArray(e.venues) ? e.venues[0]?.name : e.venues?.name,
     }))
-    .sort((a, b) => {
-      const aFuture = a.date >= today
-      const bFuture = b.date >= today
-      if (aFuture && bFuture) return a.date < b.date ? -1 : 1 // ascending
-      if (!aFuture && !bFuture) return a.date < b.date ? 1 : -1 // descending
-      return aFuture ? -1 : 1 // future events float above past events
-    })
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 
   return (
     <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
