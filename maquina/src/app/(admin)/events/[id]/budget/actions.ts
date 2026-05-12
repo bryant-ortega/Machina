@@ -45,9 +45,12 @@ const ExpenseInput = z.object({
     .optional(),
   category: z.enum(EXPENSE_CATEGORY_ORDER),
   item: z.string().trim().min(1, 'Item name is required').max(120),
+  // DB CHECK is `qty > 0` (strict), so reject 0 / empty before we ever
+  // hit Postgres. Empty/blank coerces to NaN here so Zod surfaces a clean
+  // field error instead of a raw constraint violation.
   qty: z.preprocess(
-    (v) => (v === '' || v === null || v === undefined ? 0 : Number(v)),
-    z.number().min(0, 'Qty must be ≥ 0')
+    (v) => (v === '' || v === null || v === undefined ? NaN : Number(v)),
+    z.number().positive('Qty must be greater than 0')
   ),
   price: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? 0 : Number(v)),

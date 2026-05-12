@@ -334,8 +334,17 @@ export function BudgetForm({
     setTopSuccess(null)
     setFieldErrors({})
 
-    // Light client-side guard: every expense needs a non-empty item.
-    for (const ex of expenses) {
+    // Save-time filter: any row whose qty is 0 (or blank) is treated as
+    // a delete request. If it had a DB id, the server's diff drops it;
+    // if it was brand-new, it just never gets inserted. The row stays
+    // visible (greyed out) in the form until save, so typos are
+    // recoverable.
+    const keptExpenses = expenses.filter(
+      (ex) => (Number(ex.qty) || 0) > 0
+    )
+
+    // Light client-side guard: every kept expense needs a non-empty item.
+    for (const ex of keptExpenses) {
       if (!ex.item.trim()) {
         setTopError('Every expense line needs a name.')
         return
@@ -356,7 +365,7 @@ export function BudgetForm({
       merch_seller_fee: Number(merchSellerFee) || 0,
       bar_per_head: Number(barPerHead) || 0,
       bar_pct: (Number(barPct) || 0) / 100,
-      expenses: expenses.map((ex) => ({
+      expenses: keptExpenses.map((ex) => ({
         id: ex.id || '',
         category: ex.category,
         item: ex.item.trim(),
@@ -489,14 +498,30 @@ export function BudgetForm({
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
                       {rows.map((row) => {
+                        const qtyNum = Number(row.qty) || 0
                         const lineTotal =
-                          (Number(row.qty) || 0) * (Number(row.price) || 0)
+                          qtyNum * (Number(row.price) || 0)
                         const idx = expenses.findIndex(
                           (e) => e.uid === row.uid
                         )
                         const methodDisabled = row.payment_status === 'unpaid'
+                        // qty=0 → "will be removed on save". Fade the row so
+                        // the user has visual confirmation before they save.
+                        const willBeRemoved = qtyNum <= 0
                         return (
-                          <tr key={row.uid}>
+                          <tr
+                            key={row.uid}
+                            className={
+                              willBeRemoved
+                                ? 'opacity-50 transition-opacity'
+                                : 'transition-opacity'
+                            }
+                            title={
+                              willBeRemoved
+                                ? 'Will be removed on save'
+                                : undefined
+                            }
+                          >
                             <td className="px-4 py-2">
                               <input
                                 value={row.item}
@@ -506,9 +531,9 @@ export function BudgetForm({
                                   })
                                 }
                                 placeholder={`${EXPENSE_CATEGORY_LABELS[cat]} item`}
-                                className={inputClass(
+                                className={`${inputClass(
                                   fieldErrors[`expenses.${idx}.item`]
-                                )}
+                                )} ${willBeRemoved ? 'line-through' : ''}`}
                               />
                             </td>
                             <td className="px-4 py-2">
