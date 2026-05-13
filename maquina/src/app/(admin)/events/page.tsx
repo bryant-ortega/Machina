@@ -128,7 +128,12 @@ export default async function EventsPage({
                         { year: 'numeric', month: 'short', day: 'numeric' }
                       )}
                     </span>
-                    <span className="font-mono">{e.event_id}</span>
+                    <span>
+                      {new Date(`${e.date}T00:00:00`).toLocaleDateString(
+                        undefined,
+                        { weekday: 'long' }
+                      )}
+                    </span>
                   </div>
                 </Link>
               </li>
@@ -141,7 +146,7 @@ export default async function EventsPage({
             <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Date</th>
-                <th className="px-4 py-2.5 font-medium">Event ID</th>
+                <th className="px-4 py-2.5 font-medium">Day</th>
                 <th className="px-4 py-2.5 font-medium">Title</th>
                 <th className="px-4 py-2.5 font-medium">Venue</th>
                 <th className="px-4 py-2.5 font-medium">City</th>
@@ -188,9 +193,12 @@ export default async function EventsPage({
                         )}
                       </Link>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                    <td className="whitespace-nowrap px-4 py-3 text-zinc-700 dark:text-zinc-300">
                       <Link href={`/events/${e.id}/edit`} className="block">
-                        {e.event_id}
+                        {new Date(`${e.date}T00:00:00`).toLocaleDateString(
+                          undefined,
+                          { weekday: 'long' }
+                        )}
                       </Link>
                     </td>
                     <td className="px-4 py-3">
