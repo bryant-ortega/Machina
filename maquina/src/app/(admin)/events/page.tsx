@@ -33,7 +33,7 @@ export default async function EventsPage({
   const { data: rawEvents } = await supabase
     .from('events')
     .select(
-      'id, date, event_id, title, type, status, stages, weekend_flag, city, state, venues(name)'
+      'id, date, event_id, title, status, weekend_flag, city, state, venues(name)'
     )
 
   type RawEvent = {
@@ -41,9 +41,7 @@ export default async function EventsPage({
     date: string
     event_id: string
     title: string
-    type: string
     status: string
-    stages: number
     weekend_flag: string
     city: string
     state: string
@@ -150,8 +148,6 @@ export default async function EventsPage({
                 <th className="px-4 py-2.5 font-medium">Title</th>
                 <th className="px-4 py-2.5 font-medium">Venue</th>
                 <th className="px-4 py-2.5 font-medium">City</th>
-                <th className="px-4 py-2.5 font-medium">Type</th>
-                <th className="px-4 py-2.5 font-medium">Stages</th>
                 <th className="px-4 py-2.5 font-medium">Weekend</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
               </tr>
@@ -160,7 +156,7 @@ export default async function EventsPage({
               {events.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={7}
                     className="px-4 py-10 text-center text-zinc-500 dark:text-zinc-400"
                   >
                     No events yet.{' '}
@@ -223,22 +219,6 @@ export default async function EventsPage({
                         className="block"
                       >
                         {e.city}, {e.state}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                      <Link
-                        href={`/events/${e.id}/edit`}
-                        className="block capitalize"
-                      >
-                        {e.type}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                      <Link
-                        href={`/events/${e.id}/edit`}
-                        className="block"
-                      >
-                        {e.stages}
                       </Link>
                     </td>
                     <td className="px-4 py-3">
