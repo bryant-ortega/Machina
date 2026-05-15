@@ -120,14 +120,24 @@ export default async function BudgetPage({
           {event.event_id}
         </p>
       </div>
-      {exportHref ? (
-        <a
-          href={exportHref}
-          className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
-        >
-          Export PDF
-        </a>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {view === 'final' && (
+          <Link
+            href={`/events/${id}/payments`}
+            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Manage payments →
+          </Link>
+        )}
+        {exportHref ? (
+          <a
+            href={exportHref}
+            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Export PDF
+          </a>
+        ) : null}
+      </div>
     </header>
   )
 
@@ -243,7 +253,7 @@ export default async function BudgetPage({
     supabase
       .from('event_budget_expenses')
       .select(
-        'id, category, item, qty, price, payment_status, payment_method'
+        'id, category, item, qty, price, payment_status'
       )
       .eq('budget_id', activeBudget.id)
       .order('category', { ascending: true })
@@ -300,8 +310,6 @@ export default async function BudgetPage({
             qty: e.qty == null ? '0' : String(e.qty),
             price: e.price == null ? '0' : String(e.price),
             payment_status: normalizePaymentStatus(e.payment_status),
-            payment_method:
-              e.payment_method == null ? '' : String(e.payment_method),
           }))}
           initialTiers={(tiers ?? []).map((t) => ({
             id: t.id as string,
@@ -315,10 +323,8 @@ export default async function BudgetPage({
   )
 }
 
-/** Defensive coerce — DB column allows only the three known values, but
- *  TS sees it as `string`. Anything else falls back to 'unpaid'. */
-function normalizePaymentStatus(
-  raw: unknown
-): 'unpaid' | 'partial' | 'paid' {
-  return raw === 'paid' || raw === 'partial' ? raw : 'unpaid'
+/** Defensive coerce — DB column is now binary unpaid/paid (migration 0013).
+ *  Anything unexpected falls back to 'unpaid'. */
+function normalizePaymentStatus(raw: unknown): 'unpaid' | 'paid' {
+  return raw === 'paid' ? 'paid' : 'unpaid'
 }

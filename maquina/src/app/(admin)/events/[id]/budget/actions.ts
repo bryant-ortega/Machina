@@ -56,20 +56,12 @@ const ExpenseInput = z.object({
     (v) => (v === '' || v === null || v === undefined ? 0 : Number(v)),
     z.number().min(0, 'Price must be ≥ 0')
   ),
-  // Phase 18 — Paid + payment method. Editable on the FINAL budget only;
-  // the form sends defaults ('unpaid' / null) on the estimated view so
-  // these always validate even when the controls aren't rendered.
-  payment_status: z.enum(['unpaid', 'partial', 'paid']).default('unpaid'),
-  // Freeform after migration 0011 dropped the CHECK constraint. Trim and
-  // normalize empty strings to null so we don't store '   ' as a method.
-  payment_method: z.preprocess(
-    (v) => {
-      if (v === null || v === undefined) return null
-      const s = String(v).trim()
-      return s === '' ? null : s
-    },
-    z.string().max(80).nullable()
-  ),
+  // Phase 18 — payment_status / payment_method are NOT written from the
+  // budget form anymore. The expense_payments ledger (and the
+  // addExpensePayment server action that recomputes a rolled-up status
+  // into payment_status) own those columns. The budget form deliberately
+  // leaves them alone so editing qty / price / item never clobbers
+  // ledger-derived state.
 })
 
 const TierInput = z.object({
@@ -267,7 +259,8 @@ export async function updateBudget(
 
   for (const ex of data.expenses) {
     if (ex.id) {
-      // Update existing row.
+      // Update existing row. Deliberately omit payment_status /
+      // payment_method — the ledger owns them.
       const { error: uErr } = await admin
         .from('event_budget_expenses')
         .update({
@@ -275,15 +268,14 @@ export async function updateBudget(
           item: ex.item,
           qty: ex.qty,
           price: ex.price,
-          payment_status: ex.payment_status,
-          payment_method: ex.payment_method,
         })
         .eq('id', ex.id)
       if (uErr) {
         return { ok: false, reason: 'db_failed', message: uErr.message }
       }
     } else {
-      // Insert new row.
+      // Insert new row. payment_status defaults to 'unpaid' in DB;
+      // payment_method stays NULL until a payment is recorded.
       const { error: iErr } = await admin
         .from('event_budget_expenses')
         .insert({
@@ -292,8 +284,6 @@ export async function updateBudget(
           item: ex.item,
           qty: ex.qty,
           price: ex.price,
-          payment_status: ex.payment_status,
-          payment_method: ex.payment_method,
         })
       if (iErr) {
         return { ok: false, reason: 'db_failed', message: iErr.message }
