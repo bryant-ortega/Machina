@@ -56,12 +56,19 @@ const ExpenseInput = z.object({
     (v) => (v === '' || v === null || v === undefined ? 0 : Number(v)),
     z.number().min(0, 'Price must be ≥ 0')
   ),
-  // Phase 18 — payment_status / payment_method are NOT written from the
-  // budget form anymore. The expense_payments ledger (and the
-  // addExpensePayment server action that recomputes a rolled-up status
-  // into payment_status) own those columns. The budget form deliberately
-  // leaves them alone so editing qty / price / item never clobbers
-  // ledger-derived state.
+  // Phase 18 (slim) — inline payment tracking on the expense row.
+  // Binary status (no 'partial'); freeform method text after migration
+  // 0011 dropped the CHECK constraint. Estimated rows ship the defaults
+  // from the form, so these always validate even when controls hide.
+  payment_status: z.enum(['unpaid', 'paid']).default('unpaid'),
+  payment_method: z.preprocess(
+    (v) => {
+      if (v === null || v === undefined) return null
+      const s = String(v).trim()
+      return s === '' ? null : s
+    },
+    z.string().max(80).nullable()
+  ),
 })
 
 const TierInput = z.object({
@@ -259,8 +266,7 @@ export async function updateBudget(
 
   for (const ex of data.expenses) {
     if (ex.id) {
-      // Update existing row. Deliberately omit payment_status /
-      // payment_method — the ledger owns them.
+      // Update existing row.
       const { error: uErr } = await admin
         .from('event_budget_expenses')
         .update({
@@ -268,14 +274,15 @@ export async function updateBudget(
           item: ex.item,
           qty: ex.qty,
           price: ex.price,
+          payment_status: ex.payment_status,
+          payment_method: ex.payment_method,
         })
         .eq('id', ex.id)
       if (uErr) {
         return { ok: false, reason: 'db_failed', message: uErr.message }
       }
     } else {
-      // Insert new row. payment_status defaults to 'unpaid' in DB;
-      // payment_method stays NULL until a payment is recorded.
+      // Insert new row.
       const { error: iErr } = await admin
         .from('event_budget_expenses')
         .insert({
@@ -284,6 +291,8 @@ export async function updateBudget(
           item: ex.item,
           qty: ex.qty,
           price: ex.price,
+          payment_status: ex.payment_status,
+          payment_method: ex.payment_method,
         })
       if (iErr) {
         return { ok: false, reason: 'db_failed', message: iErr.message }

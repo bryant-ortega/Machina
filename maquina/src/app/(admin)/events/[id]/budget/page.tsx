@@ -120,24 +120,14 @@ export default async function BudgetPage({
           {event.event_id}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {view === 'final' && (
-          <Link
-            href={`/events/${id}/payments`}
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            Manage payments →
-          </Link>
-        )}
-        {exportHref ? (
-          <a
-            href={exportHref}
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            Export PDF
-          </a>
-        ) : null}
-      </div>
+      {exportHref ? (
+        <a
+          href={exportHref}
+          className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+        >
+          Export PDF
+        </a>
+      ) : null}
     </header>
   )
 
@@ -253,7 +243,7 @@ export default async function BudgetPage({
     supabase
       .from('event_budget_expenses')
       .select(
-        'id, category, item, qty, price, payment_status'
+        'id, category, item, qty, price, payment_status, payment_method'
       )
       .eq('budget_id', activeBudget.id)
       .order('category', { ascending: true })
@@ -310,6 +300,8 @@ export default async function BudgetPage({
             qty: e.qty == null ? '0' : String(e.qty),
             price: e.price == null ? '0' : String(e.price),
             payment_status: normalizePaymentStatus(e.payment_status),
+            payment_method:
+              e.payment_method == null ? '' : String(e.payment_method),
           }))}
           initialTiers={(tiers ?? []).map((t) => ({
             id: t.id as string,

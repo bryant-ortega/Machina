@@ -63,12 +63,13 @@ type ExpenseRow = {
   qty: string
   price: string
   /**
-   * Rolled-up payment status. Read-only here — the source of truth is
-   * the expense_payments ledger (Phase 18), updated via the
-   * /events/[id]/payments page. The budget form just displays the
-   * current value as a badge in the Final view.
+   * Inline payment tracking — editable in the Final view only. Binary
+   * unpaid/paid (no partial). Estimated rows still carry these fields
+   * so the row shape stays uniform; controls just don't render there.
    */
   payment_status: PaymentStatus
+  /** Freeform method text. Required when payment_status='paid'. */
+  payment_method: string
 }
 
 type TierRow = {
@@ -112,6 +113,7 @@ export type BudgetFormProps = {
     qty: string
     price: string
     payment_status: PaymentStatus
+    payment_method: string
   }>
   initialTiers: Array<{
     id: string
@@ -147,6 +149,7 @@ export function BudgetForm({
       qty: e.qty,
       price: e.price,
       payment_status: e.payment_status,
+      payment_method: e.payment_method,
     }))
   )
 
@@ -286,6 +289,7 @@ export function BudgetForm({
         qty: '1',
         price: '0',
         payment_status: 'unpaid',
+        payment_method: '',
       },
     ])
   }
@@ -368,6 +372,8 @@ export function BudgetForm({
         item: ex.item.trim(),
         qty: Number(ex.qty) || 0,
         price: Number(ex.price) || 0,
+        payment_status: ex.payment_status,
+        payment_method: ex.payment_method.trim(),
       })),
       tiers: tiers.map((t) => ({
         id: t.id || '',
@@ -476,9 +482,14 @@ export function BudgetForm({
                         <th className="w-20 px-4 py-2 font-medium">Qty</th>
                         <th className="w-28 px-4 py-2 font-medium">Price</th>
                         {isFinal && (
-                          <th className="w-32 px-4 py-2 font-medium">
-                            Status
-                          </th>
+                          <>
+                            <th className="w-28 px-4 py-2 font-medium">
+                              Paid
+                            </th>
+                            <th className="w-40 px-4 py-2 font-medium">
+                              Method
+                            </th>
+                          </>
                         )}
                         <th className="w-28 px-4 py-2 text-right font-medium">
                           Total
@@ -560,11 +571,56 @@ export function BudgetForm({
                               />
                             </td>
                             {isFinal && (
-                              <td className="px-4 py-2">
-                                <PaymentStatusBadge
-                                  status={row.payment_status}
-                                />
-                              </td>
+                              <>
+                                <td className="px-4 py-2">
+                                  <select
+                                    value={row.payment_status}
+                                    onChange={(e) => {
+                                      const next = e.target
+                                        .value as PaymentStatus
+                                      // Clear method when flipping back to
+                                      // unpaid so we don't carry stale text.
+                                      updateExpense(row.uid, {
+                                        payment_status: next,
+                                        ...(next === 'unpaid'
+                                          ? { payment_method: '' }
+                                          : {}),
+                                      })
+                                    }}
+                                    className={selectClass(
+                                      fieldErrors[
+                                        `expenses.${idx}.payment_status`
+                                      ],
+                                      row.payment_status
+                                    )}
+                                  >
+                                    <option value="unpaid">Unpaid</option>
+                                    <option value="paid">Paid</option>
+                                  </select>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <input
+                                    value={row.payment_method}
+                                    onChange={(e) =>
+                                      updateExpense(row.uid, {
+                                        payment_method: e.target.value,
+                                      })
+                                    }
+                                    disabled={row.payment_status === 'unpaid'}
+                                    placeholder={
+                                      row.payment_status === 'unpaid'
+                                        ? '—'
+                                        : 'Zelle, cash, check #…'
+                                    }
+                                    maxLength={80}
+                                    className={inputClass(
+                                      fieldErrors[
+                                        `expenses.${idx}.payment_method`
+                                      ]
+                                    )}
+                                  />
+                                </td>
+                              </>
                             )}
                             <td className="px-4 py-2 text-right text-zinc-700 tabular-nums dark:text-zinc-300">
                               {formatUSDCents(lineTotal)}
@@ -1105,23 +1161,14 @@ function inputClass(err?: string): string {
   ].join(' ')
 }
 
-/**
- * Read-only payment status badge used in the Final budget view.
- * Status is derived from the expense_payments ledger and updated by the
- * addExpensePayment server action — it's display-only here.
- */
-function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
-  const cls =
+/** inputClass + a colored left accent reflecting Paid status. */
+function selectClass(err: string | undefined, status: PaymentStatus): string {
+  const base = inputClass(err)
+  const tone =
     status === 'paid'
-      ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
-      : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
-  return (
-    <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}
-    >
-      {status}
-    </span>
-  )
+      ? 'border-l-4 border-l-emerald-500 dark:border-l-emerald-400'
+      : 'border-l-4 border-l-zinc-300 dark:border-l-zinc-700'
+  return `${base} ${tone}`
 }
 
 /** Anything not in the known list lands in 'staff' as a safe default. */
