@@ -76,7 +76,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm space-y-6 justify-self-center sm:justify-self-start">
         <div className="space-y-1.5">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Maquina
+            MΛQUIИΛ
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">

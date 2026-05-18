@@ -45,7 +45,6 @@ These rules apply at all times. Do not deviate without asking first.
 
 These features are explicitly deferred. Do not scaffold, stub, or reference them until their phase is reached:
 
-- ❌ PayPal Payouts API integration
 - ❌ Full custom View Builder UI (drag-and-drop field picker, create/edit/delete custom views)
 - ❌ Per-event view customization (`event_view_customizations` table)
 - ❌ Partner role permissions and access controls
@@ -100,7 +99,6 @@ Everything else is post-MVP.
 | 16 | DJ Analytics view |
 | 17 | View Builder (custom views) |
 | 18 | Payment tracking (manual mark-paid) |
-| 19 | PayPal Payouts |
 | 20 | Automated emails + W-9 reminders |
 
 ---
@@ -1441,38 +1439,6 @@ CREATE POLICY "payments_all_admin" ON expense_payments FOR ALL USING (get_my_rol
 
 ---
 
-## Phase 19 — PayPal Payouts
-
-### Goal
-Admin can send payments to DJs and vendors with PayPal handles directly from the app.
-
-### Pre-requisites
-- PayPal Business account created
-- PayPal Payouts API access approved (apply at developer.paypal.com)
-- PayPal client ID and secret added to Vercel environment variables
-
-### Environment Variables to Add
-```
-PAYPAL_CLIENT_ID=your-paypal-client-id
-PAYPAL_CLIENT_SECRET=your-paypal-client-secret
-PAYPAL_MODE=sandbox  # change to 'live' when ready
-```
-
-### Implementation Notes
-- All PayPal API calls are server-side only in `/api/payments/paypal/`
-- Never expose PayPal credentials to the client
-- Payout flow: confirm modal → server calls PayPal Payouts API → response updates expense record
-- On failure: log to `expense_payments` with `status: failed`; show error to admin
-
-### Acceptance Criteria
-- [ ] Pay via PayPal button appears on expense lines with PayPal payees
-- [ ] Confirmation modal shows payee name, handle, and amount
-- [ ] Sandbox payout succeeds and expense updates to paid
-- [ ] Failed payout shows error and leaves expense unpaid
-- [ ] PayPal transaction ID saved to `expense_payments`
-
----
-
 ## Phase 20 — Automated Emails + W-9 Reminders
 
 ### Goal
@@ -1554,9 +1520,6 @@ Write to `audit_log` in every server action that creates, edits, or deletes a re
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client + Server | Safe to expose; RLS limits it |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Never expose to client; bypasses RLS |
 | `RESEND_API_KEY` | Server only | Phase 20 |
-| `PAYPAL_CLIENT_ID` | Server only | Phase 19 |
-| `PAYPAL_CLIENT_SECRET` | Server only | Phase 19 |
-| `PAYPAL_MODE` | Server only | `sandbox` or `live` |
 
 ---
 

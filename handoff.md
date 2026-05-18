@@ -218,12 +218,9 @@ maquina/
 ## Open / likely-next items
 
 - **BUILD_PLAN status.** Phases 0–17 plus a slim Phase 18 (inline
-  Paid+Method on Final budget) are shipped. Remaining build-plan
-  phases:
-  - **Phase 19 — PayPal Payouts.** Needs Chase to set up a PayPal
-    Business account + Payouts API approval + add `PAYPAL_CLIENT_ID`
-    / `PAYPAL_CLIENT_SECRET` / `PAYPAL_MODE` to Vercel env vars
-    before the code can be wired up.
+  Paid+Method on Final budget) are shipped. Phase 19 (PayPal Payouts)
+  was removed from the plan — Chase doesn't want PayPal incorporated
+  at this time. Remaining build-plan phases:
   - **Phase 20 — Automated Emails + W-9 reminders.** Needs Chase to
     sign up at resend.com and add `RESEND_API_KEY` to Vercel before
     the code can be wired up. Includes a Vercel cron at
