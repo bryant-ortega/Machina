@@ -38,6 +38,8 @@ export default async function AdminLayout({
     .maybeSingle()
 
   if (profile?.role !== 'admin') {
+    if (profile?.role === 'viewer') redirect('/viewer/year')
+    if (profile?.role === 'collab') redirect('/collab/events')
     redirect('/dj/profile')
   }
 

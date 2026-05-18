@@ -58,6 +58,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.rewrite(new URL('/not-found', request.url))
   }
 
+  // /viewer/* requires a session. Role enforcement (must be 'viewer'
+  // or 'admin') happens in the viewer layout — middleware only ensures
+  // someone is signed in before any /viewer page renders.
+  if (path.startsWith('/viewer') && !user) {
+    return NextResponse.rewrite(new URL('/not-found', request.url))
+  }
+
   return supabaseResponse
 }
 

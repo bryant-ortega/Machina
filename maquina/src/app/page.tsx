@@ -32,6 +32,7 @@ export default async function Home() {
     const role = profile?.role ?? 'dj'
     if (role === 'admin') redirect('/events')
     if (role === 'collab') redirect('/collab/events')
+    if (role === 'viewer') redirect('/viewer/year')
     redirect('/dj/profile')
   }
   return <RootRedirect />

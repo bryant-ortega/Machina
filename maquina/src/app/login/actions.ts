@@ -61,6 +61,9 @@ export async function loginUser(formData: FormData): Promise<LoginResult | never
   if (role === 'admin') {
     redirect('/events')
   }
+  if (role === 'viewer') {
+    redirect('/viewer/year')
+  }
   if (role === 'collab') {
     redirect('/collab/events')
   }
