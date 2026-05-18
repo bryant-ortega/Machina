@@ -107,7 +107,7 @@ export default async function AdminLayout({
             priority
             className="h-7 w-7 shrink-0 object-contain"
           />
-          <p className="text-sm font-semibold tracking-tight">Maquina</p>
+          <p className="text-sm font-semibold tracking-tight">MΛQUIИΛ</p>
         </div>
       </header>
 
@@ -122,7 +122,7 @@ export default async function AdminLayout({
             priority
             className="h-10 w-10 shrink-0 object-contain"
           />
-          <p className="text-sm font-semibold tracking-tight">Maquina</p>
+          <p className="text-sm font-semibold tracking-tight">MΛQUIИΛ</p>
         </div>
         {sidebarBody}
       </aside>

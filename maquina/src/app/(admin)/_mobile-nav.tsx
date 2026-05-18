@@ -89,7 +89,7 @@ export function MobileNav({
       {/* Drawer panel */}
       <div className="relative z-50 flex h-full w-72 max-w-[85vw] flex-col border-r border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-          <p className="text-sm font-semibold tracking-tight">Maquina</p>
+          <p className="text-sm font-semibold tracking-tight">MΛQUIИΛ</p>
           <button
             type="button"
             onClick={() => setOpen(false)}
