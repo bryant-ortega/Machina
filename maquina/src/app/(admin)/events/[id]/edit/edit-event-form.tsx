@@ -159,6 +159,7 @@ export function EditEventForm({
       end_time: s.end_time,
     }))
   )
+  const tbdDjId = djs.find((d) => d.dj_name === 'TBD')?.id ?? ''
 
   // -------- Venue autocomplete ------------------------------------------
   const venueSuggestions = useMemo(() => {
@@ -349,7 +350,7 @@ export function EditEventForm({
         stage_number: 1,
         slot_order: Math.min(nextOrder, 6),
         slot_type: 'open',
-        dj_id: '',
+        dj_id: tbdDjId,
         rate: String(SLOT_DEFAULT_RATES['open']),
         // Phase 14: empty start/end means "use the doors+offset auto
         // calculation in run-of-show". Admins fill these in only to

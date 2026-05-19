@@ -154,7 +154,8 @@ export function NewEventForm({
   // Initial slot uses the default doors time (21:00). Subsequent adds
   // pull the *current* doors time so changing it before adding more
   // slots gets propagated.
-  const [slots, setSlots] = useState<SlotRow[]>([newSlot(1, 1, 'open', '21:00')])
+  const tbdDjId = djs.find((d) => d.dj_name === 'TBD')?.id ?? ''
+  const [slots, setSlots] = useState<SlotRow[]>([{ ...newSlot(1, 1, 'open', '21:00'), dj_id: tbdDjId }])
 
   // -------- Venue autocomplete ------------------------------------------
   // Filter venues matching the typed city (case-insensitive contains).
@@ -316,7 +317,7 @@ export function NewEventForm({
         : 0) + 1
     setSlots([
       ...slots,
-      newSlot(1, Math.min(nextOrder, 6), 'open', doorsTime || '21:00'),
+      { ...newSlot(1, Math.min(nextOrder, 6), 'open', doorsTime || '21:00'), dj_id: tbdDjId },
     ])
   }
 
