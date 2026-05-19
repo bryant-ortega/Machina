@@ -24,10 +24,10 @@ const FormSchema = z.object({
     .string()
     .min(8, 'Password must be at least 8 characters')
     .max(128, 'Password must be 128 characters or fewer'),
-  phone: z.string().trim().max(40).optional(),
+  phone: z.string().trim().min(1, 'Phone is required').max(40),
   region: z.enum(['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other']),
-  pay_method: z.enum(['', 'zelle', 'venmo', 'paypal']).optional(),
-  pay_handle: z.string().trim().max(120).optional(),
+  pay_method: z.enum(['zelle', 'venmo', 'paypal'], { message: 'Pay method is required' }),
+  pay_handle: z.string().trim().min(1, 'Pay handle is required').max(120),
 })
 
 type FormValues = z.infer<typeof FormSchema>
@@ -58,7 +58,7 @@ export function RegistrationForm() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
-    defaultValues: { region: 'SoCal' },
+    defaultValues: { region: 'SoCal', pay_method: 'zelle' },
   })
 
   function onSubmit(values: FormValues) {
@@ -219,7 +219,7 @@ export function RegistrationForm() {
         />
       </Field>
 
-      <Field label="Phone (optional)" error={errors.phone?.message}>
+      <Field label="Phone" error={errors.phone?.message}>
         <input
           type="tel"
           inputMode="tel"
@@ -245,20 +245,19 @@ export function RegistrationForm() {
       </Field>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Pay method (optional)" error={errors.pay_method?.message}>
+        <Field label="Pay method" error={errors.pay_method?.message}>
           <select
             {...register('pay_method')}
             className={inputClass}
             disabled={pending}
           >
-            <option value="">—</option>
             <option value="zelle">Zelle</option>
             <option value="venmo">Venmo</option>
             <option value="paypal">PayPal</option>
           </select>
         </Field>
 
-        <Field label="Pay handle (optional)" error={errors.pay_handle?.message}>
+        <Field label="Pay handle (@name, or phone number)" error={errors.pay_handle?.message}>
           <input
             type="text"
             autoComplete="off"

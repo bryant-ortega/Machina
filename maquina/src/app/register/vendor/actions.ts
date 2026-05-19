@@ -27,23 +27,14 @@ const RegisterVendorInput = z.object({
     .string()
     .min(8, 'Password must be at least 8 characters')
     .max(128, 'Password must be 128 characters or fewer'),
-  phone: z
-    .string()
-    .trim()
-    .max(40)
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  phone: z.string().trim().min(1, 'Phone is required').max(40),
   region: z.enum(['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other']),
-  pay_method: z.preprocess(
-    (v) => (v === '' ? undefined : v),
-    z.enum(['zelle', 'venmo', 'paypal']).optional()
-  ),
+  pay_method: z.enum(['zelle', 'venmo', 'paypal'], { message: 'Pay method is required' }),
   pay_handle: z
     .string()
     .trim()
-    .max(120)
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
+    .min(1, 'Pay handle is required')
+    .max(120),
 })
 
 export type RegisterVendorResult =
@@ -123,9 +114,9 @@ export async function registerVendor(
     company_name: input.company_name,
     contact_name: input.contact_name,
     email: input.email,
-    phone: input.phone ?? null,
-    pay_method: input.pay_method ?? null,
-    pay_handle: input.pay_handle ?? null,
+    phone: input.phone,
+    pay_method: input.pay_method,
+    pay_handle: input.pay_handle,
     region: input.region,
   })
   if (vendorErr) {
@@ -195,9 +186,9 @@ async function reclaimOrphanAccount(
     company_name: input.company_name,
     contact_name: input.contact_name,
     email: input.email,
-    phone: input.phone ?? null,
-    pay_method: input.pay_method ?? null,
-    pay_handle: input.pay_handle ?? null,
+    phone: input.phone,
+    pay_method: input.pay_method,
+    pay_handle: input.pay_handle,
     region: input.region,
   })
   if (vendorErr) {
