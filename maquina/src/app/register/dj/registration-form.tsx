@@ -25,7 +25,7 @@ const FormSchema = z.object({
     .min(8, 'Password must be at least 8 characters')
     .max(128, 'Password must be 128 characters or fewer'),
   phone: z.string().trim().min(1, 'Phone is required').max(40),
-  region: z.enum(['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other']),
+  region: z.enum(['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other', 'New York', 'Portland', 'Texas', 'Central Cal', 'Las Vegas']),
   pay_method: z.enum(['zelle', 'venmo', 'paypal'], { message: 'Pay method is required' }),
   pay_handle: z.string().trim().min(1, 'Pay handle is required').max(120),
 })
@@ -46,6 +46,11 @@ const REGIONS = [
   'Arizona',
   'Seattle',
   'Other',
+  'New York',
+  'Portland',
+  'Texas',
+  'Central Cal',
+  'Las Vegas',
 ] as const
 
 export function RegistrationForm() {

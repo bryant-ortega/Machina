@@ -23,7 +23,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
  * change) and /djs/[id] (the form re-renders with fresh data).
  */
 
-const REGIONS = ['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other'] as const
+const REGIONS = ['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other', 'New York', 'Portland', 'Texas', 'Central Cal', 'Las Vegas'] as const
 
 // Postgres' uuid type accepts any 8-4-4-4-12 hex pattern. Zod 4's .uuid()
 // is stricter (version nibble must be 1-5), which rejects our seed UUIDs

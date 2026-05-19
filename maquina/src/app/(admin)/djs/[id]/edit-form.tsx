@@ -12,7 +12,7 @@ import { updateDj, type UpdateDjResult } from './actions'
  * an inline "Saved" pill for a couple seconds.
  */
 
-const REGIONS = ['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other'] as const
+const REGIONS = ['SoCal', 'NorCal', 'Chicago', 'Arizona', 'Seattle', 'Other', 'New York', 'Portland', 'Texas', 'Central Cal', 'Las Vegas'] as const
 
 const FormSchema = z.object({
   dj_name: z.string().trim().min(1, 'DJ name is required').max(100),

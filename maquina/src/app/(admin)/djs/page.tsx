@@ -24,6 +24,11 @@ const REGIONS = [
   'Arizona',
   'Seattle',
   'Other',
+  'New York',
+  'Portland',
+  'Texas',
+  'Central Cal',
+  'Las Vegas',
 ] as const
 type Region = (typeof REGIONS)[number]
 
@@ -74,7 +79,7 @@ export default async function DjRosterPage({
       acc[r] = rows.filter((d) => d.region === r).length
       return acc
     },
-    { SoCal: 0, NorCal: 0, Chicago: 0, Arizona: 0, Seattle: 0, Other: 0 }
+    { SoCal: 0, NorCal: 0, Chicago: 0, Arizona: 0, Seattle: 0, Other: 0, 'New York': 0, Portland: 0, Texas: 0, 'Central Cal': 0, 'Las Vegas': 0 }
   )
 
   return (
