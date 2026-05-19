@@ -67,6 +67,14 @@ export async function loginUser(formData: FormData): Promise<LoginResult | never
   if (role === 'collab') {
     redirect('/collab/events')
   }
+  if (role === 'vendor') {
+    const { data: v } = await supabase
+      .from('vendors')
+      .select('w9_status')
+      .eq('user_id', data.user.id)
+      .maybeSingle()
+    redirect(v?.w9_status === 'on_file' ? '/vendor/profile' : '/vendor/upload-w9')
+  }
 
   // DJ — destination depends on whether their W-9 is on file.
   const { data: dj } = await supabase
