@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { fetchSlotCounts, DjFractionBadge } from '@/components/dj-fraction'
 import { ViewToolbar } from '../_components/view-toolbar'
 
 /**
@@ -59,6 +60,8 @@ export default async function YearViewPage({
     ...e,
     venueName: Array.isArray(e.venues) ? e.venues[0]?.name : e.venues?.name,
   }))
+
+  const slotCounts = await fetchSlotCounts(supabase, events.map((e) => e.id))
 
   // Group events by month index (0..11). Months with no events are kept
   // out of the render path entirely.
@@ -123,6 +126,7 @@ export default async function YearViewPage({
                           <th className="px-4 py-2.5 font-medium">City</th>
                           <th className="px-4 py-2.5 font-medium">State</th>
                           <th className="px-4 py-2.5 font-medium">Status</th>
+                          <th className="px-4 py-2.5 font-medium text-right">DJs</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
@@ -190,6 +194,16 @@ export default async function YearViewPage({
                                 className="block"
                               >
                                 <StatusBadge status={e.status} />
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <Link
+                                href={`/events/${e.id}/edit`}
+                                className="block"
+                              >
+                                <DjFractionBadge
+                                  {...(slotCounts.get(e.id) ?? { filled: 0, total: 0 })}
+                                />
                               </Link>
                             </td>
                           </tr>

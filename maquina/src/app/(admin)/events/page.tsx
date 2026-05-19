@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { fetchSlotCounts, DjFractionBadge } from '@/components/dj-fraction'
 
 /**
  * Admin events index. Lists every event, upcoming first, with the most
@@ -56,6 +57,8 @@ export default async function EventsPage({
       venueName: Array.isArray(e.venues) ? e.venues[0]?.name : e.venues?.name,
     }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+
+  const slotCounts = await fetchSlotCounts(supabase, events.map((e) => e.id))
 
   return (
     <div className="flex-1 px-4 py-6 sm:px-8 sm:py-10">
@@ -117,6 +120,9 @@ export default async function EventsPage({
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={e.status} />
                       <WeekendBadge flag={e.weekend_flag} />
+                      <DjFractionBadge
+                        {...(slotCounts.get(e.id) ?? { filled: 0, total: 0 })}
+                      />
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
@@ -150,13 +156,14 @@ export default async function EventsPage({
                 <th className="px-4 py-2.5 font-medium">City</th>
                 <th className="px-4 py-2.5 font-medium">Weekend</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 font-medium text-right">DJs</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
               {events.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-zinc-500 dark:text-zinc-400"
                   >
                     No events yet.{' '}
@@ -235,6 +242,16 @@ export default async function EventsPage({
                         className="block"
                       >
                         <StatusBadge status={e.status} />
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/events/${e.id}/edit`}
+                        className="block"
+                      >
+                        <DjFractionBadge
+                          {...(slotCounts.get(e.id) ?? { filled: 0, total: 0 })}
+                        />
                       </Link>
                     </td>
                   </tr>

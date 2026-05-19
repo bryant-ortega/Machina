@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { fetchSlotCounts, DjFractionBadge } from '@/components/dj-fraction'
 import { ViewToolbar } from '../_components/view-toolbar'
 
 /**
@@ -64,6 +65,8 @@ export default async function MonthViewPage({
     venueName: Array.isArray(e.venues) ? e.venues[0]?.name : e.venues?.name,
   }))
 
+  const slotCounts = await fetchSlotCounts(supabase, events.map((e) => e.id))
+
   const monthName = MONTH_NAMES[month - 1]
   const yearRange = buildYearRange(year)
 
@@ -122,7 +125,12 @@ export default async function MonthViewPage({
                         {e.venueName ?? '—'} · {e.city}, {e.state}
                       </p>
                     </div>
-                    <StatusBadge status={e.status} />
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusBadge status={e.status} />
+                      <DjFractionBadge
+                        {...(slotCounts.get(e.id) ?? { filled: 0, total: 0 })}
+                      />
+                    </div>
                   </div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">
                     {e.day_of_week} ·{' '}
@@ -148,13 +156,14 @@ export default async function MonthViewPage({
                 <th className="px-4 py-2.5 font-medium">City</th>
                 <th className="px-4 py-2.5 font-medium">State</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 font-medium text-right">DJs</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
               {events.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-zinc-500 dark:text-zinc-400"
                   >
                     No events in {monthName} {year}.
@@ -205,6 +214,13 @@ export default async function MonthViewPage({
                     <td className="px-4 py-3">
                       <Link href={`/events/${e.id}/edit`} className="block">
                         <StatusBadge status={e.status} />
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={`/events/${e.id}/edit`} className="block">
+                        <DjFractionBadge
+                          {...(slotCounts.get(e.id) ?? { filled: 0, total: 0 })}
+                        />
                       </Link>
                     </td>
                   </tr>
