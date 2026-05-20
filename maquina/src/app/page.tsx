@@ -33,6 +33,7 @@ export default async function Home() {
     if (role === 'admin') redirect('/events')
     if (role === 'collab') redirect('/collab/events')
     if (role === 'viewer') redirect('/viewer/year')
+    if (role === 'designer') redirect('/designer/view')
     if (role === 'vendor') redirect('/vendor/profile')
     redirect('/dj/profile')
   }

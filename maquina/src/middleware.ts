@@ -65,6 +65,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.rewrite(new URL('/not-found', request.url))
   }
 
+  // /designer/* requires a session. Role enforcement (must be
+  // 'designer' or 'admin') happens in the designer layout — middleware
+  // only ensures someone is signed in before any /designer page renders.
+  if (path.startsWith('/designer') && !user) {
+    return NextResponse.rewrite(new URL('/not-found', request.url))
+  }
+
   // /vendor/* requires a session. Role enforcement happens at the
   // page level (each vendor page redirects non-vendors). Middleware
   // only ensures someone is signed in first.
