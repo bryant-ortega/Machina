@@ -318,7 +318,7 @@ export default async function DesignerViewPage() {
                   <tr
                     key={event.id}
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
-                      isPastDate(event.date) ? 'opacity-60' : ''
+                      isPastDate(event.date) ? 'opacity-45' : ''
                     }`}
                   >
                     {visibleFields.map((f) => (
