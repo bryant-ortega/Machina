@@ -82,7 +82,9 @@ export default async function ViewRendererPage({
 
   // Decide which expensive joins to actually run.
   const needsLineup =
-    visibleKeys.has('dj_count') || visibleKeys.has('headliner_name')
+    visibleKeys.has('dj_count') ||
+    visibleKeys.has('headliner_name') ||
+    visibleKeys.has('dj_list')
   const FINANCIAL_KEYS = [
     'est_expenses',
     'est_income',
@@ -150,34 +152,65 @@ export default async function ViewRendererPage({
   // ---- 3. Lineup (only if dj_count or headliner_name is visible) --------
   const djCountByEvent = new Map<string, number>()
   const headlinerByEvent = new Map<string, string>()
+  const djNamesByEvent = new Map<string, string[]>()
   if (needsLineup && eventIds.length > 0) {
     const { data: slots } = await supabase
       .from('event_dj_slots')
-      .select('event_id, dj_id, slot_type, djs(dj_name)')
+      .select('event_id, dj_id, slot_type, slot_order, djs(dj_name)')
       .in('event_id', eventIds)
 
     type Slot = {
       event_id: string
       dj_id: string
       slot_type: string
+      slot_order: number | null
       djs: { dj_name: string } | { dj_name: string }[] | null
     }
-    const grouped = new Map<string, { djIds: Set<string>; headliner?: string }>()
-    for (const s of (slots ?? []) as Slot[]) {
-      let entry = grouped.get(s.event_id)
-      if (!entry) {
-        entry = { djIds: new Set() }
-        grouped.set(s.event_id, entry)
-      }
-      entry.djIds.add(s.dj_id)
-      if (s.slot_type === 'headline' && !entry.headliner) {
-        const dj = Array.isArray(s.djs) ? s.djs[0] : s.djs
-        if (dj?.dj_name) entry.headliner = dj.dj_name
-      }
+    // Flyer-style ordering: headliner first, then main support, then
+    // the rest of the lineup, then residents, then closers. Within a
+    // priority tier we tiebreak by slot_order ascending (the order
+    // they were entered on the event form).
+    const slotTypePriority: Record<string, number> = {
+      headline: 0,
+      main_support: 1,
+      support_2: 2,
+      support_1: 3,
+      open: 4,
+      resident: 5,
+      close: 6,
     }
-    for (const [eid, entry] of grouped) {
-      djCountByEvent.set(eid, entry.djIds.size)
-      if (entry.headliner) headlinerByEvent.set(eid, entry.headliner)
+    const orderedByEvent = new Map<string, Slot[]>()
+    for (const s of (slots ?? []) as Slot[]) {
+      const arr = orderedByEvent.get(s.event_id) ?? []
+      arr.push(s)
+      orderedByEvent.set(s.event_id, arr)
+    }
+    for (const [eid, arr] of orderedByEvent) {
+      arr.sort((a, b) => {
+        const pa = slotTypePriority[a.slot_type] ?? 99
+        const pb = slotTypePriority[b.slot_type] ?? 99
+        if (pa !== pb) return pa - pb
+        return (a.slot_order ?? 0) - (b.slot_order ?? 0)
+      })
+      const djIds = new Set<string>()
+      const seenNames = new Set<string>()
+      const names: string[] = []
+      let headliner: string | undefined
+      for (const s of arr) {
+        djIds.add(s.dj_id)
+        const dj = Array.isArray(s.djs) ? s.djs[0] : s.djs
+        const name = dj?.dj_name
+        if (name && !seenNames.has(name)) {
+          seenNames.add(name)
+          names.push(name)
+        }
+        if (s.slot_type === 'headline' && !headliner && name) {
+          headliner = name
+        }
+      }
+      djCountByEvent.set(eid, djIds.size)
+      if (headliner) headlinerByEvent.set(eid, headliner)
+      djNamesByEvent.set(eid, names)
     }
   }
 
@@ -315,6 +348,7 @@ export default async function ViewRendererPage({
       venue_address: venue?.address ?? null,
       dj_count: djCountByEvent.get(e.id) ?? 0,
       headliner_name: headlinerByEvent.get(e.id) ?? null,
+      dj_names: djNamesByEvent.get(e.id) ?? null,
       // Budget aggregates fall back to null when there's no estimated
       // budget; accessors null-coalesce to 0 for currency/number kinds.
       est_expenses: summary?.est_expenses ?? null,
@@ -417,7 +451,9 @@ export default async function ViewRendererPage({
                     {visibleFields.map((f) => (
                       <td
                         key={f.key}
-                        className={`whitespace-nowrap px-4 py-3 text-zinc-700 dark:text-zinc-300 ${alignClassFor(
+                        className={`${
+                          f.def.wrap ? 'whitespace-normal' : 'whitespace-nowrap'
+                        } px-4 py-3 text-zinc-700 dark:text-zinc-300 ${alignClassFor(
                           f.def.kind
                         )}`}
                       >

@@ -101,6 +101,12 @@ export type EventViewRow = {
   venue_address?: string | null
   dj_count?: number | null
   headliner_name?: string | null
+  /** Full ordered list of DJ names booked on the event (headliner
+   *  first, then by slot priority + slot_order). Deduped by name.
+   *  Used by the `dj_list` field on custom views (e.g. Designer)
+   *  so flyers can show the full lineup. Null when the renderer
+   *  didn't ask the lineup loader for it. */
+  dj_names?: string[] | null
 
   // Budget aggregates — computed by the renderer via computeBudget().
   // The View Builder never exposes individual line items (per-DJ
@@ -133,6 +139,10 @@ export type FieldDef = {
   /** True for fields that should be on by default when seeding a new
    *  custom view. */
   defaultOn?: boolean
+  /** When true, the renderer lets the cell wrap onto multiple lines
+   *  instead of forcing `whitespace-nowrap`. Useful for long list-like
+   *  values (e.g. the full DJ lineup). Defaults to false. */
+  wrap?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +189,7 @@ export const FIELDS: readonly FieldDef[] = [
   // -------- Lineup --------
   { key: 'dj_count',       label: 'DJ count',      category: 'lineup',    kind: 'number',  accessor: (r) => r.dj_count ?? 0 },
   { key: 'headliner_name', label: 'Headliner',     category: 'lineup',    kind: 'text',    accessor: (r) => r.headliner_name ?? '' },
+  { key: 'dj_list',        label: 'DJ lineup',     category: 'lineup',    kind: 'text',    accessor: (r) => (r.dj_names ?? []).join(', '), wrap: true },
 
   // -------- Financials --------
   // The View Builder deliberately exposes only aggregate totals — never
