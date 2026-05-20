@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { isPastDate } from '@/lib/utils'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 /**
@@ -63,7 +64,9 @@ export default async function CollabEventsPage() {
             {events.map((e) => (
               <li
                 key={`m-${e.id}`}
-                className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+                className={`rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 ${
+                  isPastDate(e.date) ? 'opacity-60' : ''
+                }`}
               >
                 <Link
                   href={`/collab/events/${e.id}`}
@@ -117,7 +120,9 @@ export default async function CollabEventsPage() {
                 {events.map((e) => (
                   <tr
                     key={e.id}
-                    className="hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                      isPastDate(e.date) ? 'opacity-60' : ''
+                    }`}
                   >
                     <td className="px-4 py-3 font-mono text-xs tabular-nums text-zinc-700 dark:text-zinc-300">
                       <Link

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { isPastDate } from '@/lib/utils'
 import { notFound } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import {
@@ -446,7 +447,9 @@ export default async function ViewRendererPage({
                 {rows.map(({ event, row }) => (
                   <tr
                     key={event.id}
-                    className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
+                      isPastDate(event.date) ? 'opacity-60' : ''
+                    }`}
                   >
                     {visibleFields.map((f) => (
                       <td

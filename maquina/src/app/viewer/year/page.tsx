@@ -1,4 +1,5 @@
 import { ViewToolbar } from '@/app/(admin)/views/_components/view-toolbar'
+import { isPastDate } from '@/lib/utils'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 /**
@@ -140,7 +141,9 @@ export default async function ViewerYearPage({
                         {monthEvents.map((e) => (
                           <tr
                             key={e.id}
-                            className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                            className={`hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
+                              isPastDate(e.date) ? 'opacity-60' : ''
+                            }`}
                           >
                             <td className="whitespace-nowrap px-4 py-3 text-zinc-700 dark:text-zinc-300">
                               {new Date(`${e.date}T00:00:00`).toLocaleDateString(

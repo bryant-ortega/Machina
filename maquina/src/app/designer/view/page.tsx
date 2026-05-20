@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { isPastDate } from '@/lib/utils'
 import {
   FIELD_BY_KEY,
   type EventViewRow,
@@ -33,14 +34,18 @@ export default async function DesignerViewPage() {
 
   // ---- 1. Find the designer view ---------------------------------------
   // RLS (migration 0020) already restricts this query to views with
-  // audience='designer'. If Chase ever creates multiple, we take the
-  // most-recently-updated one. That's not configurable yet — if
-  // multiple designer views become a real workflow, we'd add an
-  // assigned_view_id column on profiles per the handoff's Path B note.
+  // audience='designer'. We additionally filter is_system=false so
+  // built-in views (Posting Calendar etc., seeded as audience='designer'
+  // in 0010) never win the picker — designers only see Chase's own
+  // custom views. If multiple custom designer views exist, we take the
+  // most-recently-updated one. If multiple designer views ever become
+  // a real workflow, we'd add an assigned_view_id column on profiles
+  // per the handoff's Path B note.
   const { data: view } = await supabase
     .from('views')
     .select('id, name, description, audience, is_system, slug, updated_at')
     .eq('audience', 'designer')
+    .eq('is_system', false)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -54,9 +59,12 @@ export default async function DesignerViewPage() {
             No designer view available
           </h1>
           <p>
-            Your account is set up, but no view has been marked for the
-            designer audience yet. Ask the admin to open the View Builder
-            and create a view with audience set to <em>Designer</em>.
+            Your account is set up, but no custom view has been marked
+            for the designer audience yet. Ask the admin to open the
+            View Builder, edit a custom view, and change its{' '}
+            <strong>Audience</strong> dropdown to <em>Designer</em>.
+            (Built-in views like Posting Calendar don&apos;t count —
+            this page only picks up your own views.)
           </p>
         </div>
       </div>
@@ -309,7 +317,9 @@ export default async function DesignerViewPage() {
                 {rows.map(({ event, row }) => (
                   <tr
                     key={event.id}
-                    className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
+                      isPastDate(event.date) ? 'opacity-60' : ''
+                    }`}
                   >
                     {visibleFields.map((f) => (
                       <td

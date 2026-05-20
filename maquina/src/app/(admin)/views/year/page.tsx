@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { isPastDate } from '@/lib/utils'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { fetchSlotCounts, DjFractionBadge } from '@/components/dj-fraction'
 import { ViewToolbar } from '../_components/view-toolbar'
@@ -133,7 +134,9 @@ export default async function YearViewPage({
                         {monthEvents.map((e) => (
                           <tr
                             key={e.id}
-                            className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                            className={`hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
+                              isPastDate(e.date) ? 'opacity-60' : ''
+                            }`}
                           >
                             <td className="whitespace-nowrap px-4 py-3 text-zinc-700 dark:text-zinc-300">
                               <Link
