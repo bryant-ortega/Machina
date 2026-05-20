@@ -353,6 +353,10 @@ export default async function DesignerViewPage() {
 function renderCell(def: FieldDef, row: EventViewRow) {
   const raw = def.accessor(row)
 
+  if (def.key === 'status') {
+    return <StatusBadge status={String(raw ?? '')} />
+  }
+
   if (def.kind === 'link') {
     const text = String(raw ?? '') || '—'
     return (
@@ -424,3 +428,29 @@ function alignClassFor(kind: FieldDef['kind']): string {
       return 'text-left'
   }
 }
+
+/**
+ * Small colored pill matching the admin events page. Tentative
+ * (default) is amber, confirmed is green. Renders status text inside
+ * a rounded badge so designers can scan the page at a glance.
+ *
+ * Kept as a local function for parity with the other list pages
+ * (events/page.tsx, viewer/year/page.tsx, etc.) which all duplicate
+ * this component. If we ever extract a shared component, this is one
+ * of the obvious consolidation targets.
+ */
+function StatusBadge({ status }: { status: string }) {
+  const isConfirmed = status === 'confirmed'
+  return (
+    <span
+      className={
+        isConfirmed
+          ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200'
+          : 'rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200'
+      }
+    >
+      {status || '—'}
+    </span>
+  )
+}
+
