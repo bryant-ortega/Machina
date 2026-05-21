@@ -238,6 +238,13 @@ export async function uploadDjW9(
     return { ok: false, reason: 'db_failed', message: updateError.message }
   }
 
+  // Stop any pending W-9 reminders for this DJ (best-effort).
+  await admin
+    .from('w9_reminders')
+    .update({ stopped_at: new Date().toISOString() })
+    .eq('dj_id', djId)
+    .is('stopped_at', null)
+
   revalidatePath('/djs')
   revalidatePath(`/djs/${djId}`)
   return { ok: true }

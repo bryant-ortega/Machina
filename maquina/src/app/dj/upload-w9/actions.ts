@@ -104,5 +104,13 @@ export async function uploadW9(formData: FormData): Promise<UploadW9Result> {
     return { ok: false, reason: 'db_failed', message: updateError.message }
   }
 
+  // Stop any pending W-9 reminders for this DJ (best-effort; the cron
+  // also filters by w9_status, but this records when reminders ceased).
+  await admin
+    .from('w9_reminders')
+    .update({ stopped_at: new Date().toISOString() })
+    .eq('dj_id', dj.id)
+    .is('stopped_at', null)
+
   return { ok: true }
 }

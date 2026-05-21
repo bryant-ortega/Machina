@@ -90,5 +90,12 @@ export async function uploadVendorW9(
     return { ok: false, reason: 'db_failed', message: updateError.message }
   }
 
+  // Stop any pending W-9 reminders for this vendor (best-effort).
+  await admin
+    .from('w9_reminders')
+    .update({ stopped_at: new Date().toISOString() })
+    .eq('vendor_id', vendor.id)
+    .is('stopped_at', null)
+
   return { ok: true }
 }

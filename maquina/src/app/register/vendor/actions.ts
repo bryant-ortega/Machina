@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { sendVendorRegistrationConfirmation } from '@/lib/email'
 import { z } from 'zod'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
@@ -128,6 +129,16 @@ export async function registerVendor(
     }
   }
 
+  // Best-effort registration confirmation (dormant-safe; never blocks).
+  try {
+    await sendVendorRegistrationConfirmation({
+      to: input.email,
+      companyName: input.company_name,
+    })
+  } catch {
+    // ignore — registration already succeeded
+  }
+
   const supabase = await createServerSupabaseClient()
   const { error: signInErr } = await supabase.auth.signInWithPassword({
     email: input.email,
@@ -193,6 +204,15 @@ async function reclaimOrphanAccount(
   })
   if (vendorErr) {
     return { ok: false, reason: 'create_failed', message: vendorErr.message }
+  }
+
+  try {
+    await sendVendorRegistrationConfirmation({
+      to: input.email,
+      companyName: input.company_name,
+    })
+  } catch {
+    // ignore — account reclaim already succeeded
   }
 
   redirect('/vendor/upload-w9')

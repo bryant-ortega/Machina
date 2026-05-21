@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import { sendDjRegistrationConfirmation } from '@/lib/email'
 import { z } from 'zod'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
@@ -150,6 +151,17 @@ export async function registerDj(
     }
   }
 
+  // Best-effort registration confirmation. Never blocks sign-in — the
+  // email lib no-ops without RESEND_API_KEY and swallows its own errors.
+  try {
+    await sendDjRegistrationConfirmation({
+      to: input.email,
+      djName: input.dj_name,
+    })
+  } catch {
+    // ignore — registration already succeeded
+  }
+
   // Sign in via the SSR client so the response sets the session cookies.
   const supabase = await createServerSupabaseClient()
   const { error: signInErr } = await supabase.auth.signInWithPassword({
@@ -239,6 +251,15 @@ async function reclaimOrphanAccount(
   })
   if (djErr) {
     return { ok: false, reason: 'create_failed', message: djErr.message }
+  }
+
+  try {
+    await sendDjRegistrationConfirmation({
+      to: input.email,
+      djName: input.dj_name,
+    })
+  } catch {
+    // ignore — account reclaim already succeeded
   }
 
   redirect('/dj/upload-w9')

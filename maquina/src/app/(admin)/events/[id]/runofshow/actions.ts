@@ -1,8 +1,8 @@
 'use server'
 
 import { z } from 'zod'
-import { Resend } from 'resend'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { sendEmail, isEmailConfigured } from '@/lib/email'
 import { renderRunOfShowPdf } from '@/lib/pdf-runofshow'
 
 /**
@@ -19,13 +19,12 @@ import { renderRunOfShowPdf } from '@/lib/pdf-runofshow'
  * addresses. The PDF is the same buffer for every send (rendered
  * once, attached as base64).
  *
- * Env required:
- *   RESEND_API_KEY     — Resend API key
- *   RESEND_FROM        — verified sender override.
- *                        Defaults to "Maquina <maquina@losgoths.co>"; the
- *                        losgoths.co domain must be verified in Resend
- *                        (DKIM + SPF + return-path) for sends to land in
- *                        inboxes rather than spam.
+ * Sending is centralized in src/lib/email.ts (sendEmail), which owns
+ * the Resend client, the From resolution (RESEND_FROM, defaulting to
+ * "Maquina <maquina@losgoths.co>"), and error handling. This action
+ * only assembles recipients + content and accounts for per-send
+ * results. The losgoths.co domain must be verified in Resend
+ * (DKIM + SPF + return-path) for sends to land in inboxes.
  */
 
 const Input = z.object({
@@ -81,9 +80,8 @@ export async function sendRunOfShowEmail(
   if (profile?.role !== 'admin') return { ok: false, reason: 'forbidden' }
 
   // 2. API key check up front so we fail fast with a clear message
-  //    rather than blowing up inside Resend.
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) return { ok: false, reason: 'no_api_key' }
+  //    rather than rendering a PDF we can't send.
+  if (!isEmailConfigured()) return { ok: false, reason: 'no_api_key' }
 
   // 3. Render PDF + collect labels for the email body.
   const pdf = await renderRunOfShowPdf({
@@ -163,38 +161,32 @@ export async function sendRunOfShowEmail(
   ].join('\n')
 
   // 6. Send. One email per recipient — preserves privacy, and lets
-  //    bounces fail in isolation.
-  const resend = new Resend(apiKey)
-  const from = process.env.RESEND_FROM ?? 'Maquina <maquina@losgoths.co>'
-  const attachmentBase64 = pdf.buffer.toString('base64')
+  //    bounces fail in isolation. sendEmail (lib/email) owns the Resend
+  //    client, From resolution, and never throws — it returns a typed
+  //    result we fold into the sent/skipped accounting.
   const attachments = [
     {
       filename: pdf.filename,
-      content: attachmentBase64,
+      content: pdf.buffer.toString('base64'),
     },
   ]
 
   const skipped: { reason: string; email: string }[] = []
   let sent = 0
   for (const { email } of recipients.values()) {
-    try {
-      const { error } = await resend.emails.send({
-        from,
-        to: [email],
-        subject,
-        text,
-        html,
-        attachments,
-      })
-      if (error) {
-        skipped.push({ email, reason: error.message ?? 'resend error' })
-      } else {
-        sent++
-      }
-    } catch (e) {
+    const result = await sendEmail({
+      to: [email],
+      subject,
+      text,
+      html,
+      attachments,
+    })
+    if (result.ok) {
+      sent++
+    } else {
       skipped.push({
         email,
-        reason: e instanceof Error ? e.message : 'unknown error',
+        reason: result.skipped ? 'email not configured' : result.message,
       })
     }
   }
